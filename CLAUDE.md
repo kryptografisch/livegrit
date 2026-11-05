@@ -18,3 +18,4 @@ Browser-only PWA speedrun split timer (LiveSplit-like): Svelte 5 (runes) + TypeS
 - `livesplit-core-master/`, `LiveSplitOne-master/`: local read-only references, git-ignored. Never depend on them in code or scripts. LiveSplit One is just an idea source; don't copy its code.
 - livesplit-core is built only inside Podman (`scripts/build-livesplit-core.sh`, documented in `docs/build-livesplit-core.md`); there's no Rust on the host.
 - npm packages: write them into `package.json` (newest stable versions), then ask before running `npm install`.
+- After code changes: `npm run format`, `npm run check`, `npm run test` (and `npm run build` at the end of a step).

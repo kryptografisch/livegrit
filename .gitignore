@@ -1,4 +1,10 @@
-livesplit*/
-LiveSplit*/
+# reference repos (root only; must not match vendor/livesplit-core/)
+/livesplit*/
+/LiveSplit*/
 
 tmp/
+
+node_modules/
+dist/
+dev-dist/
+*.log

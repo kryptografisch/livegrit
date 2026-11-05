@@ -8,23 +8,23 @@ When a step is done, tick its checkboxes, fill in "Notes / deviations" under tha
 
 ## Decisions (override plan.md where they differ)
 
-| Topic | Decision |
-| --- | --- |
-| Project location | App lives at the project root `split-lite/`, **not** `splitter/` (plan.md §3 is outdated: there is no existing scaffold, start from scratch). |
-| Reference repos | `livesplit-core-master/` and `LiveSplitOne-master/` stay in the project folder as **read-only references**, git-ignored (never committed). Read them for ideas; never import from, build in, or depend on them in code or scripts. |
-| livesplit-core source | Cloned **only inside the Podman build container**, at a pinned commit SHA recorded in the build script. |
-| Build toolchain | No Rust on the host. Build runs in Podman (`docker.io/library/rust` image, Rust ≥ 1.97 because livesplit-core requires `rust-version = 1.97`). The developer approves/runs the podman command. |
-| Built core | Committed to `vendor/livesplit-core/` with `package.json`, consumed as `"livesplit-core": "file:./vendor/livesplit-core"`. |
-| Core features | `parsing,run-saving,timing,run-editing,layouts`, built with `--no-default-features`. No hotkeys, server-protocol, web-rendering, therun-gg, auto-splitting or localization (English only). `wasm-web` only if a needed type requires it. |
-| WASM loading | Use wasm-bindgen `--target web` output: a self-contained ES module whose `init()` loads the wasm via `new URL('….wasm', import.meta.url)`, which Vite handles natively. So `vite-plugin-wasm` / `vite-plugin-top-level-await` (needed only for `--target bundler` style direct `.wasm` imports) are not needed (deviation from plan.md §3). Add them only if a real problem shows up. |
-| LiveSplit One | Only a reference for ideas. Don't copy its code or structure; decide what's best for this project. |
-| Versions | Always the newest stable versions that work together (check the npm registry when writing `package.json`). |
-| Docs | Local docs live in `docs/` (e.g. `docs/llms-small.txt` for Svelte 5). Other docs are fetched on demand when a step needs them (e.g. vite-plugin-pwa in step 11). |
-| Explicit resource mgmt | Do not use `using` declarations (needs a Babel transform for Safari). Call `.dispose()` in `try/finally`. |
-| Node | v24 (host). TypeScript `^5.x` unless the step-1 check proves svelte-check supports a newer one. |
-| npm installs | Claude writes `package.json` with exact versions, then **asks permission** to run `npm install`. Claude never installs anything silently. |
-| Tests | Vitest from step 2 on. |
-| Temp files | Use `tmp/` in this project (git-ignored). |
+| Topic                  | Decision                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project location       | App lives at the project root `split-lite/`, **not** `splitter/` (plan.md §3 is outdated: there is no existing scaffold, start from scratch).                                                                                                                                                                                                                                         |
+| Reference repos        | `livesplit-core-master/` and `LiveSplitOne-master/` stay in the project folder as **read-only references**, git-ignored (never committed). Read them for ideas; never import from, build in, or depend on them in code or scripts.                                                                                                                                                    |
+| livesplit-core source  | Cloned **only inside the Podman build container**, at a pinned commit SHA recorded in the build script.                                                                                                                                                                                                                                                                               |
+| Build toolchain        | No Rust on the host. Build runs in Podman (`docker.io/library/rust` image, Rust ≥ 1.97 because livesplit-core requires `rust-version = 1.97`). The developer approves/runs the podman command.                                                                                                                                                                                        |
+| Built core             | Committed to `vendor/livesplit-core/` with `package.json`, consumed as `"livesplit-core": "file:./vendor/livesplit-core"`.                                                                                                                                                                                                                                                            |
+| Core features          | `parsing,run-saving,timing,run-editing,layouts`, built with `--no-default-features`. No hotkeys, server-protocol, web-rendering, therun-gg, auto-splitting or localization (English only). `wasm-web` only if a needed type requires it.                                                                                                                                              |
+| WASM loading           | Use wasm-bindgen `--target web` output: a self-contained ES module whose `init()` loads the wasm via `new URL('….wasm', import.meta.url)`, which Vite handles natively. So `vite-plugin-wasm` / `vite-plugin-top-level-await` (needed only for `--target bundler` style direct `.wasm` imports) are not needed (deviation from plan.md §3). Add them only if a real problem shows up. |
+| LiveSplit One          | Only a reference for ideas. Don't copy its code or structure; decide what's best for this project.                                                                                                                                                                                                                                                                                    |
+| Versions               | Always the newest stable versions that work together (check the npm registry when writing `package.json`).                                                                                                                                                                                                                                                                            |
+| Docs                   | Local docs live in `docs/` (e.g. `docs/llms-small.txt` for Svelte 5). Other docs are fetched on demand when a step needs them (e.g. vite-plugin-pwa in step 11).                                                                                                                                                                                                                      |
+| Explicit resource mgmt | Do not use `using` declarations (needs a Babel transform for Safari). Call `.dispose()` in `try/finally`.                                                                                                                                                                                                                                                                             |
+| Node                   | v24 (host). TypeScript 6.x (svelte-check doesn't support 7 yet).                                                                                                                                                                                                                                                                                                                      |
+| npm installs           | Claude writes `package.json` with exact (pinned) versions, then **asks permission** to run `npm install`. Claude never installs anything silently.                                                                                                                                                                                                                                    |
+| Tests                  | Vitest from step 2 on.                                                                                                                                                                                                                                                                                                                                                                |
+| Temp files             | Use `tmp/` in this project (git-ignored).                                                                                                                                                                                                                                                                                                                                             |
 
 ---
 
@@ -32,21 +32,30 @@ When a step is done, tick its checkboxes, fill in "Notes / deviations" under tha
 
 **Goal:** a runnable empty app with the final folder structure, so `npm run dev` works before any livesplit-core work.
 
-- [ ] Extend the existing `.gitignore` (keep its `livesplit*/` and `LiveSplit*/` entries): `node_modules/`, `dist/`, `dev-dist/`, `tmp/`.
-- [ ] `package.json` (newest stable versions, verified against the npm registry): `vite`, `svelte@5`, `@sveltejs/vite-plugin-svelte`, `typescript@^5`, `svelte-check`, `vitest`, `idb`. livesplit-core is added in step 3, and the PWA plugin in step 11. Scripts: `dev`, `build`, `preview`, `check`, `test`.
-- [ ] Ask permission to run `npm install`.
-- [ ] `vite.config.ts`, `tsconfig.json`, `svelte.config.js`, `index.html`, `src/main.ts`, `src/App.svelte` with a hash router (`#/` Timer, `#/controls` Controls), and placeholder `pages/TimerPage.svelte` + `pages/ControlsPage.svelte` with navigation between them.
-- [ ] `src/styles/tokens.css` (dark LiveSplit-like placeholder tokens: bg, text, ahead/behind gain/loss shades, gold, paused, not-running, fonts, spacing) + `global.css`. Components use tokens only.
-- [ ] Folder structure from plan.md §5 (empty modules with a one-line comment are fine), plus `scripts/`, `vendor/`, `tests/fixtures/`, `docs/`.
-- [ ] Copy these sample split files from `livesplit-core-master/tests/run_files/` into `tests/fixtures/`: `livesplit1.6.lss`, `livesplit1.6_gametime.lss`, `Celeste - Any% (1.2.1.5).lss`, `celeste_native_segment_groups.lss`. Also copy `LICENSE-MIT` / `LICENSE-APACHE` there, because these are livesplit-core test files.
-- [ ] `README.md`: what the project is, prerequisites (Node 24; Podman only for rebuilding the core), `npm run dev/build/preview/check/test`, project structure overview, and the browser focus limitation.
-- [ ] One trivial Vitest test so `npm run test` passes.
+- [x] Extend the existing `.gitignore` (keep its `livesplit*/` and `LiveSplit*/` entries): `node_modules/`, `dist/`, `dev-dist/`, `tmp/`.
+- [x] `package.json` (newest stable versions, verified against the npm registry): `vite`, `svelte@5`, `@sveltejs/vite-plugin-svelte`, `typescript`, `svelte-check`, `vitest`, `idb`. livesplit-core is added in step 3, and the PWA plugin in step 11. Scripts: `dev`, `build`, `preview`, `check`, `test`.
+- [x] Ask permission to run `npm install`.
+- [x] `vite.config.ts`, `tsconfig.json`, `svelte.config.js`, `index.html`, `src/main.ts`, `src/App.svelte` with a hash router (`#/` Timer, `#/controls` Controls), and placeholder `pages/TimerPage.svelte` + `pages/ControlsPage.svelte` with navigation between them.
+- [x] `src/styles/tokens.css` (dark LiveSplit-like placeholder tokens: bg, text, ahead/behind gain/loss shades, gold, paused, not-running, fonts, spacing) + `global.css`. Components use tokens only.
+- [x] Folder structure from plan.md §5 (empty modules with a one-line comment are fine), plus `scripts/`, `vendor/`, `tests/fixtures/`, `docs/`.
+- [x] Copy these sample split files from `livesplit-core-master/tests/run_files/` into `tests/fixtures/`: `livesplit1.6.lss`, `livesplit1.6_gametime.lss`, `Celeste - Any% (1.2.1.5).lss`, `celeste_native_segment_groups.lss`. Also copy `LICENSE-MIT` / `LICENSE-APACHE` there, because these are livesplit-core test files.
+- [x] `README.md`: what the project is, prerequisites (Node 24; Podman only for rebuilding the core), `npm run dev/build/preview/check/test`, project structure overview, and the browser focus limitation.
+- [x] One trivial Vitest test so `npm run test` passes.
 
 **Commands needing approval:** `npm install`, then `npm run dev` / `check` / `test` / `build`.
 **Acceptance:** `npm run dev` serves both pages and the hash links switch between them; `npm run check`, `npm run test` and `npm run build` are clean.
 **Commit:** `chore: project init (vite + svelte 5 + ts scaffold, readme)`
 
 Notes / deviations:
+
+- Done. Versions pinned exactly: vite 8.3.6, svelte 5.57.3, @sveltejs/vite-plugin-svelte 7.3.1, typescript 6.0.3, svelte-check 4.7.8, vitest 5.1.0, idb 8.0.4, @types/node 24.19.2.
+- TypeScript 6 instead of 5: svelte-check 4.7.8 supports `^5 || ^6` (not 7).
+- `.gitignore`: reference repo patterns anchored to the root (`/livesplit*/`), otherwise they would also ignore `vendor/livesplit-core/`.
+- `npm run check` passes `--config ./svelte.config.js`; without it svelte-check also loads `LiveSplitOne-master/vite.config.ts` and prints an unresolved-import warning.
+- Router lives in `src/lib/router.svelte.ts` (not inside App.svelte). Vitest config is in `vite.config.ts` (`tests/**/*.test.ts`, node env). `src/lib/input/types.ts` already has the real `Action` type, which the trivial test covers.
+- `npm audit`: 2 low-severity issues (deepmerge, via @sveltejs/vite-plugin-svelte; no fix available upstream). Dev-only, accepted.
+- Verified: `check` 0 errors/warnings, `test` 2/2 passed, `build` OK, the dev server serves the app.
+- Added Prettier (3.9.10 + prettier-plugin-svelte 4.1.1): `.prettierrc.json` (single quotes, width 100, trailing commas), `.prettierignore` (reference repos, vendor/, fixtures, downloaded docs, lockfile), scripts `format` / `format:check`.
 
 ---
 
