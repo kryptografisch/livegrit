@@ -78,6 +78,8 @@ Control (`TimerRefMut`), each returning `CommandResult` (number; `isEvent(r)` te
 | pause / resume    | `togglePause()`, or `togglePauseOrStart()`, `pause()`, `resume()`, `undoAllPauses()`     |
 | reset             | `reset(updateSplits: boolean)` (`true` = store the attempt in history / update PB, golds). `resetAndSetAttemptAsPb()` |
 
+`attemptCount()` is incremented when an attempt **starts**; `reset(true)` adds the attempt to the history (`run.attemptHistoryLen()`).
+
 Reads (`TimerRef`): `currentPhase(): number` (`TimerPhase.NotRunning|Running|Ended|Paused`), `currentSplitIndex(): number` (-1 when not running), `currentTime(): TimeRef` (`.realTime()` / `.gameTime()` / `.index(method)` → `TimeSpanRef | null` → `.totalSeconds()`), `currentComparison(): string`, `currentTimingMethod(): number`, `currentAttemptHasNewBestTimes()`, `getRun(): RunRef` (borrow), `isGameTimeInitialized()`.
 
 Events (`Event` enum): `Started, Splitted, Finished, Reset, SplitUndone, SplitSkipped, Paused, Resumed, PausesUndone, PausesUndoneAndResumed, ComparisonChanged, TimingMethodChanged, …`. Errors (`CommandError`, negative): `NoRunInProgress, RunFinished, CantSkipLastSplit, CantUndoFirstSplit, AlreadyPaused, NotPaused, ComparisonDoesntExist, …`.
@@ -123,8 +125,11 @@ const json: LayoutStateJson = layout.updateStateAsJson(state, imageCache, timer,
 `ComponentStateJson` is a tagged union: `{ Title } | { Splits } | { Timer } | { KeyValue } | { DetailedTimer } | { Graph } | { Text } | { BlankSpace } | { Separator: null }`.
 
 - `TimerComponentStateJson`: `time` (e.g. `"1:23"`), `fraction` (e.g. `".45"`), `semantic_color`, `top_color`, `bottom_color`, `height`, `updates_frequently`.
-- `TitleComponentStateJson`: `line1: string[]`, `line2: string[]` (abbreviation candidates, longest first), `attempts: number | null`, `finished_runs: number | null`, `icon`, `is_centered`.
-- `SplitsComponentStateJson`: `splits: SplitStateJson[]` (`name`, `columns: SplitColumnState[]` (`value`, `semantic_color`, `visual_color`), `is_current_split`, `index`, `is_indented`, …), `column_labels`, `current_split_gradient`.
+- `TitleComponentStateJson`: `line1: string[]`, `line2: string[]` (abbreviation candidates; the **last** element is the full, unabbreviated value), `attempts: number | null`, `finished_runs: number | null`, `icon`, `is_centered`.
+- `SplitsComponentStateJson`: `splits: SplitStateJson[]` (`name`, `columns: SplitColumnState[]` (`value`, `semantic_color`, `visual_color`), `is_current_split`, `index`, `is_indented`, `show_separator_before`, …), `column_labels`, `current_split_gradient`. Columns and labels are listed **right to left** (default: `[split time, delta]`).
+  - Row window: `SplitsComponent.setVisualSplitCount(n)` (default 16, `0` = all), `setSplitPreviewCount`, `setAlwaysShowLastSplit`, `setShowGapSeparators`. Only settable before `intoGeneric()`; afterwards rebuild the layout.
+  - **Blank filler rows**: with `fill_with_blank_space` (default on, no setter in the bindings) the list is padded up to the visible count with rows that have `name: ''`, `columns: []` and an `index` near `usize::MAX` (even). Group header rows use odd indices near `usize::MAX`; segment rows use the segment index.
+  - Segment groups are collapsed into one header row per group except the group of the current split.
 - `KeyValueComponentStateJson` (previous segment, sum of best, possible time save, …): `key`, `value`, `semantic_color`, `key_abbreviations`.
 - `SemanticColor` = `"Default" | "AheadGainingTime" | "AheadLosingTime" | "BehindLosingTime" | "BehindGainingTime" | "BestSegment" | "NotRunning" | "Paused" | "PersonalBest"`. Map it to CSS tokens and ignore the RGBA `Color`s.
 

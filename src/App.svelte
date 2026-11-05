@@ -23,7 +23,8 @@
   .shell {
     display: flex;
     flex-direction: column;
-    min-height: 100dvh;
+    /* Fixed height, so the split list (not the page) scrolls on small windows. */
+    height: 100dvh;
   }
 
   .nav {
@@ -51,5 +52,6 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow-y: auto;
   }
 </style>

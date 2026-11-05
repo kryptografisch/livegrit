@@ -1,34 +1,59 @@
 <script lang="ts">
-  // Placeholder. Step 4 renders the livesplit-core layout state here.
   import { onMount } from 'svelte';
-  import { initCore, parseRun } from '../lib/timer/core';
+  import { timerStore } from '../lib/timer/timerStore.svelte';
+  import RunHeader from '../lib/ui/RunHeader.svelte';
+  import SplitList from '../lib/ui/SplitList.svelte';
+  import BigTimer from '../lib/ui/BigTimer.svelte';
+  import InfoList from '../lib/ui/InfoList.svelte';
+  import TimerButtons from '../lib/ui/TimerButtons.svelte';
+
+  let loadError = $state<string | null>(null);
 
   onMount(() => {
-    // Step 3 smoke check: load the core (all modes), and in dev log the fixture's game name.
-    // Replaced by the timer store in step 4.
     void (async () => {
-      await initCore();
-      if (!import.meta.env.DEV) return;
-      const { default: text } = await import('../../tests/fixtures/real-time.lss?raw');
-      const run = parseRun(text);
-      try {
-        console.info(`[livesplit-core] parsed run: ${run.gameName()} / ${run.categoryName()}`);
-      } finally {
-        run[Symbol.dispose]();
+      await timerStore.init();
+      // Dev only, until import exists (step 5): load a fixture so the page has a run.
+      if (import.meta.env.DEV && !timerStore.hasRun) {
+        const { default: text } = await import('../../tests/fixtures/real-time.lss?raw');
+        timerStore.loadSplits(text);
       }
-    })().catch((error: unknown) => console.error('[livesplit-core] failed to load', error));
+    })().catch((error: unknown) => {
+      console.error('[timer] failed to start', error);
+      loadError = error instanceof Error ? error.message : String(error);
+    });
   });
+
+  const view = $derived(timerStore.view);
 </script>
 
 <section class="timer-page">
-  <header class="run-header">
-    <div class="game">No run loaded</div>
-    <div class="category">Import a .lss file (coming in step 5)</div>
-  </header>
-
-  <div class="splits"></div>
-
-  <div class="timer">0.00</div>
+  {#if view}
+    {#if view.title}
+      <RunHeader title={view.title} />
+    {/if}
+    {#if view.splits}
+      <SplitList splits={view.splits} onscroll={(d) => timerStore.scrollSplits(d)} />
+    {:else}
+      <div class="spacer"></div>
+    {/if}
+    {#if view.timer}
+      <BigTimer timer={view.timer} />
+    {/if}
+    {#if view.info.length > 0}
+      <InfoList info={view.info} />
+    {/if}
+    <TimerButtons store={timerStore} />
+  {:else}
+    <div class="empty">
+      {#if loadError}
+        <p class="error">Could not start the timer: {loadError}</p>
+      {:else if timerStore.ready}
+        <p>No run loaded. Import a .lss file (coming in step 5).</p>
+      {:else}
+        <p>Loading…</p>
+      {/if}
+    </div>
+  {/if}
 </section>
 
 <style>
@@ -36,33 +61,24 @@
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-height: 0;
     background: var(--color-bg);
   }
 
-  .run-header {
-    text-align: center;
-    padding: var(--space-2);
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .game {
-    font-size: var(--font-size-lg);
-  }
-
-  .category {
-    color: var(--color-text-muted);
-  }
-
-  .splits {
+  .spacer {
     flex: 1;
   }
 
-  .timer {
-    font-family: var(--font-timer);
-    font-variant-numeric: tabular-nums;
-    font-size: var(--font-size-timer);
-    color: var(--color-not-running);
-    text-align: right;
-    padding: var(--space-2) var(--space-3);
+  .empty {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    padding: var(--space-3);
+    color: var(--color-text-muted);
+    text-align: center;
+  }
+
+  .error {
+    color: var(--color-warning);
   }
 </style>

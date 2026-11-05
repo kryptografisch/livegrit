@@ -119,16 +119,28 @@ Notes / deviations:
 
 ## Step 4: Timer store + Timer page rendering
 
-- [ ] `timerStore.svelte.ts`: owns the Timer + Layout; a `requestAnimationFrame` loop that calls the layout's state update → JSON (or typed state accessors) → `$state`. Reuse/dispose the per-frame state objects (no per-frame WASM leaks). The loop pauses when `document.hidden`.
-- [ ] Actions on the store: `splitOrStart`, `undo`, `skip`, `togglePause`, `reset` (and save-on-reset hook, a no-op for now).
-- [ ] Timer page UI from the layout state: header (game, category, attempts), split list (name, delta, time, current highlighted, auto-scroll, configurable visible rows), big timer (tabular nums, color from the state's semantic color mapped to tokens), footer (previous segment, possible time save, sum of best).
-- [ ] Temporary on-screen buttons for the 5 actions.
-- [ ] Load `tests/fixtures/real-time.lss` by default (dev only) until import exists.
+- [x] `timerStore.svelte.ts`: owns the Timer + Layout; a `requestAnimationFrame` loop that calls the layout's state update → JSON (or typed state accessors) → `$state`. Reuse/dispose the per-frame state objects (no per-frame WASM leaks). The loop pauses when `document.hidden`.
+- [x] Actions on the store: `splitOrStart`, `undo`, `skip`, `togglePause`, `reset` (and save-on-reset hook, a no-op for now).
+- [x] Timer page UI from the layout state: header (game, category, attempts), split list (name, delta, time, current highlighted, auto-scroll, configurable visible rows), big timer (tabular nums, color from the state's semantic color mapped to tokens), footer (previous segment, possible time save, sum of best).
+- [x] Temporary on-screen buttons for the 5 actions.
+- [x] Load `tests/fixtures/real-time.lss` by default (dev only) until import exists.
 
 **Acceptance:** a full run with the buttons works; deltas and colors match what livesplit-core reports; no memory growth over a few minutes in devtools.
 **Commit:** `feat(timer): reactive timer store and timer page`
 
 Notes / deviations:
+
+- Done, except the manual acceptance checks (full run with the buttons in the browser, colors, devtools memory over a few minutes): for the developer.
+- Shared ticker `src/lib/ticker.ts` (extra): one rAF loop for the app, stops while `document.hidden` (`visibilitychange`) and when it has no listeners. Step 7's gamepad polling subscribes to it. `ManualTicker` for tests.
+- `src/lib/timer/layoutView.ts` (extra): pure mapping `LayoutStateJson` → small view model (`title`, `splits`, `timer`, `info[]`) plus `semanticColorVar()` (semantic color → `var(--color-…)` token). Columns are reversed to left-to-right. The RGBA colors from the core are ignored.
+- Store (`TimerStore` class, singleton `timerStore`): `init()`, `loadRun(run)` (consumes), `loadSplits(text|bytes)`, the 5 actions, `scrollSplits()`, `visibleRows`, `onReset` hook (no-op), `render()`, `destroy()`. `view` is `$state.raw` and replaced as a whole per render; `phase` is updated after each command. One `LayoutState` + `ImageCache` reused for every frame (`updateStateAsJson`), so no per-frame wasm allocations.
+- Render only when needed: every frame while `Running`, otherwise only after a change (action, new run, scroll, row count). Idle/paused/ended costs nothing per frame.
+- `reset()` uses `reset(true)` (attempt goes into the history, PB/golds updated), without LiveSplit's "update splits?" prompt.
+- Visible rows: default 10 (`0` = all), set via `SplitsComponent.setVisualSplitCount`, which only works before the component goes into the layout, so changing it rebuilds the layout. The core moves the row window with the current split (keeps the last split visible); the list also `scrollIntoView`s the current row if it overflows, and the mouse wheel scrolls the core's window. Temporary "Rows" input next to the buttons; persisted in step 9, moved in step 8.
+- The core pads the list with blank filler rows up to the row count (`fill_with_blank_space`, not settable via the bindings); `layoutView` drops them (no name and no columns).
+- `App.svelte` shell is now `height: 100dvh` (was `min-height`) with a scrolling `.page`, so the split list scrolls inside the page instead of the whole page growing.
+- `API-NOTES.md` corrected: the title's abbreviation lists end with the full value (not "longest first"). Added: column order, row window settings, blank/group rows, attempt count increments on start.
+- Tests: `tests/timerStore.test.ts` (layout view mapping, group headers, color mapping; store: full attempt with all 5 actions, reset hook, render-only-when-needed, row window, filler rows, destroy). `check` 0/0, `test` 16/16, `build` OK; the dev fixture isn't in the production bundle.
 
 ---
 

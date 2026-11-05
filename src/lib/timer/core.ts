@@ -86,11 +86,19 @@ export function segmentNames(run: RunRef): string[] {
   return names;
 }
 
+export interface LayoutOptions {
+  /**
+   * How many split rows the core shows at once (0 = all). The core moves this window along
+   * with the current split (keeping the last split visible).
+   */
+  visibleRows?: number;
+}
+
 /**
  * The default layout, built in code: title, splits, timer, previous segment,
  * sum of best, possible time save. Owned: the caller disposes it.
  */
-export function createDefaultLayout(): Layout {
+export function createDefaultLayout(options: LayoutOptions = {}): Layout {
   const {
     Language,
     Layout,
@@ -104,7 +112,11 @@ export function createDefaultLayout(): Layout {
   const layout = Layout.new();
   // `intoGeneric()` consumes the specific component and `push` takes the generic one.
   layout.push(TitleComponent.new().intoGeneric());
-  layout.push(SplitsComponent.new(Language.English).intoGeneric());
+  const splits = SplitsComponent.new(Language.English);
+  if (options.visibleRows !== undefined) {
+    splits.setVisualSplitCount(Math.max(0, Math.floor(options.visibleRows)));
+  }
+  layout.push(splits.intoGeneric());
   layout.push(TimerComponent.new().intoGeneric());
   layout.push(PreviousSegmentComponent.new().intoGeneric());
   layout.push(SumOfBestComponent.new().intoGeneric());
