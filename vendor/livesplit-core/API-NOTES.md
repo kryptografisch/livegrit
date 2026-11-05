@@ -89,7 +89,9 @@ Events (`Event` enum): `Started, Splitted, Finished, Reset, SplitUndone, SplitSk
 - List: `timer.getRun().comparisonsLen()` / `.comparison(i)`. This includes the generated ones ("Personal Best", "Best Segments", "Average Segments", …) plus custom comparisons.
 - Switch: `timer.setCurrentComparison(name): CommandResult` (or `switchToNextComparison()` / `switchToPreviousComparison()`).
 - Timing method: `timer.setCurrentTimingMethod(TimingMethod.RealTime | TimingMethod.GameTime)`, `toggleTimingMethod()`, `currentTimingMethod()`.
-- There's no "run has game time" flag. Derive it, e.g. any `run.segment(i).personalBestSplitTime().gameTime() !== null`.
+- There's no "run has game time" flag. Derive it, e.g. any `run.segment(i).personalBestSplitTime().gameTime() !== null` (`runHasGameTime()` in `core.ts` also checks the best segments).
+- `setCurrentTimingMethod` returns `void`; `setCurrentComparison` returns a `CommandResult` (error `ComparisonDoesntExist`).
+- **Game Time of a live attempt is `None`** unless something calls `timer.initializeGameTime()` (it's uninitialized again for each new attempt; `isGameTimeInitialized()`). Without that, the attempt records no Game Time split times; with it, Game Time = Real Time minus loading times set via `setLoadingTimes` / `pauseGameTime`. The browser has no game-time source, so the app doesn't initialize it: in Game Time mode the comparisons/PB show Game Time, the live timer doesn't.
 
 ## Layout & per-frame state
 

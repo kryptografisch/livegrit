@@ -146,15 +146,27 @@ Notes / deviations:
 
 ## Step 5: Import, empty state, comparison & timing method
 
-- [ ] `lss.ts`: import from File (picker + drag-and-drop onto the page), with a readable error on parse failure; export to a `.lss` download (Blob + `<a download>`).
-- [ ] Empty state: "Import a .lss file or create a new run" + import button. Remove the dev default fixture.
-- [ ] Comparison switching (list what the run offers) and a Real Time / Game Time toggle (only if the run has game time; test with `game-time.lss`). Temporary placement on the Timer page; it moves to Controls in step 8.
-- [ ] Screen Wake Lock while running (feature-detect; release on pause/reset/finish; re-acquire on `visibilitychange`).
-- [ ] Vitest: lss round-trip (import → export → import keeps segment names and PB split times) for the 4 valid fixtures, plus a readable error for `invalid.lss`.
+- [x] `lss.ts`: import from File (picker + drag-and-drop onto the page), with a readable error on parse failure; export to a `.lss` download (Blob + `<a download>`).
+- [x] Empty state: "Import a .lss file or create a new run" + import button. Remove the dev default fixture.
+- [x] Comparison switching (list what the run offers) and a Real Time / Game Time toggle (only if the run has game time; test with `game-time.lss`). Temporary placement on the Timer page; it moves to Controls in step 8.
+- [x] Screen Wake Lock while running (feature-detect; release on pause/reset/finish; re-acquire on `visibilitychange`).
+- [x] Vitest: lss round-trip (import → export → import keeps segment names and PB split times) for the 4 valid fixtures, plus a readable error for `invalid.lss`.
 
 **Commit:** `feat(timer): lss import/export, comparisons, timing method, wake lock`
 
 Notes / deviations:
+
+- Done, except the manual browser checks (picker, drag-and-drop, download, wake lock on a real device): for the developer.
+- `lss.ts`: `readSplitsFile` (bytes via `file.arrayBuffer()`; the core's `parseArray` detects the encoding; files > 50 MB are refused), `importSplitsFile(store, file)` (returns `null` or a readable message), `importErrorMessage`, `lssFileName(game, category)` (`Game - Category.lss`, invalid file-name chars removed, fallback `splits.lss`), `downloadText` (Blob `application/octet-stream` so Safari doesn't append `.xml`; URL revoked after 10 s).
+- Extra: import is **refused while an attempt is in progress** (phase not `NotRunning`, incl. finished-but-not-reset), so a stray drop never throws an attempt away. The Import button is disabled then and the drop overlay says "Reset the current attempt before importing". A failed import keeps the current run (the old timer is only replaced after the new one was created).
+- `core.ts`: `EmptyRunError` (was a plain `Error`) → "… has no segments."; new `comparisonNames(run)`, `runHasGameTime(run)` (PB split times or best segments with Game Time).
+- Store: `comparisons`, `comparison`, `timingMethod` (`'RealTime' | 'GameTime'`), `hasGameTime` as `$state`; `setComparison(name): boolean`, `setTimingMethod(m)`, `exportLss(): {text, fileName} | null` (`timer.saveAsLss()`, includes a running attempt like LiveSplit). Comparison/timing method are read after every command; the comparison list and `hasGameTime` only on load and reset (not per frame). Export doesn't call `markAsUnmodified()`; step 9 decides what "saved" means.
+- **Finding (Game Time):** the core only records Game Time for an attempt after `initializeGameTime()`, which needs a load-removal/auto-splitter source the browser doesn't have. So we don't initialize it: in Game Time mode the comparisons, PB and sum of best show Game Time, but a live attempt has no Game Time (the timer shows none). Documented in `API-NOTES.md`. If the developer wants Game Time = Real Time during attempts, call `initializeGameTime()` on start; that would write Real Time values into the Game Time history, so it's not done.
+- UI (temporary): `ImportButton.svelte` (hidden file input, no `accept` filter: the core reads several formats and mobile pickers grey out unknown extensions like `.lss`), `RunToolbar.svelte` below the timer buttons (Import, Export, comparison `<select>`, Real Time / Game Time toggle shown only if `hasGameTime`). Errors show in a dismissible banner at the top of the Timer page.
+- Drag-and-drop is handled on `window` while the Timer page is mounted (enter/leave depth counter, overlay), so a file dropped on the nav bar is imported instead of the browser navigating to it. On the Controls page a drop still opens the file in the browser (step 10 adds import there).
+- Empty state: "Import a .lss file or create a new run." + Import button + drop hint. "Create a new run" comes in step 10. The dev fixture loading is removed (the build doesn't contain the fixture).
+- Wake lock: `src/lib/wakeLock.ts` (`WakeLockController`, injectable env for tests, singleton `wakeLock`). `App.svelte` calls `wakeLock.setActive(phase === 'Running')` in an `$effect`, so it works on every page and is released on pause, reset and finish. Re-acquired on `visibilitychange` (the browser drops it when hidden); a lock that arrives after it was no longer wanted is released right away; all errors are ignored.
+- Tests: `tests/lss.test.ts` (round trip for the 4 valid fixtures through the store and the core, Game Time kept, `invalid.lss` message + current run kept, empty run, refused while running, size limit, file names), `tests/timerStore.test.ts` (+ comparisons, game time toggle changes the sum of best), `tests/wakeLock.test.ts` (fake API/document). `check` 0/0, `test` 34/34, `build` OK.
 
 ---
 

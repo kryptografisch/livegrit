@@ -1,32 +1,78 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { timerStore } from '../lib/timer/timerStore.svelte';
+  import { importSplitsFile } from '../lib/timer/lss';
   import RunHeader from '../lib/ui/RunHeader.svelte';
   import SplitList from '../lib/ui/SplitList.svelte';
   import BigTimer from '../lib/ui/BigTimer.svelte';
   import InfoList from '../lib/ui/InfoList.svelte';
   import TimerButtons from '../lib/ui/TimerButtons.svelte';
+  import RunToolbar from '../lib/ui/RunToolbar.svelte';
+  import ImportButton from '../lib/ui/ImportButton.svelte';
 
   let loadError = $state<string | null>(null);
+  let importError = $state<string | null>(null);
+  /** Drag-and-drop: > 0 while files are dragged over the window (enter/leave nest). */
+  let dragDepth = $state(0);
 
   onMount(() => {
-    void (async () => {
-      await timerStore.init();
-      // Dev only, until import exists (step 5): load a fixture so the page has a run.
-      if (import.meta.env.DEV && !timerStore.hasRun) {
-        const { default: text } = await import('../../tests/fixtures/real-time.lss?raw');
-        timerStore.loadSplits(text);
-      }
-    })().catch((error: unknown) => {
+    timerStore.init().catch((error: unknown) => {
       console.error('[timer] failed to start', error);
       loadError = error instanceof Error ? error.message : String(error);
     });
   });
 
+  async function importFile(file: File) {
+    importError = await importSplitsFile(timerStore, file);
+  }
+
+  const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes('Files') ?? false;
+
+  // Handled on the window, so a file dropped anywhere (also on the nav) is imported
+  // instead of the browser navigating away to it.
+  function dragEnter(event: DragEvent) {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    dragDepth++;
+  }
+
+  function dragOver(event: DragEvent) {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+  }
+
+  function dragLeave(event: DragEvent) {
+    if (!hasFiles(event)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+  }
+
+  function drop(event: DragEvent) {
+    if (!hasFiles(event)) return;
+    event.preventDefault();
+    dragDepth = 0;
+    const file = event.dataTransfer?.files[0];
+    if (file) void importFile(file);
+  }
+
   const view = $derived(timerStore.view);
 </script>
 
+<svelte:window
+  ondragenter={dragEnter}
+  ondragover={dragOver}
+  ondragleave={dragLeave}
+  ondrop={drop}
+/>
+
 <section class="timer-page">
+  {#if importError}
+    <div class="banner" role="alert">
+      <span>{importError}</span>
+      <button type="button" onclick={() => (importError = null)} aria-label="Dismiss">×</button>
+    </div>
+  {/if}
+
   {#if view}
     {#if view.title}
       <RunHeader title={view.title} />
@@ -43,21 +89,35 @@
       <InfoList info={view.info} />
     {/if}
     <TimerButtons store={timerStore} />
+    <RunToolbar store={timerStore} onimport={importFile} />
   {:else}
     <div class="empty">
       {#if loadError}
         <p class="error">Could not start the timer: {loadError}</p>
       {:else if timerStore.ready}
-        <p>No run loaded. Import a .lss file (coming in step 5).</p>
+        <p>Import a .lss file or create a new run.</p>
+        <ImportButton onfile={importFile} primary />
+        <p class="hint">You can also drop a .lss file anywhere on this page.</p>
       {:else}
         <p>Loading…</p>
       {/if}
+    </div>
+  {/if}
+
+  {#if dragDepth > 0}
+    <div class="drop-overlay" aria-hidden="true">
+      <p>
+        {timerStore.phase === 'NotRunning'
+          ? 'Drop the .lss file to import it'
+          : 'Reset the current attempt before importing'}
+      </p>
     </div>
   {/if}
 </section>
 
 <style>
   .timer-page {
+    position: relative;
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -71,14 +131,63 @@
 
   .empty {
     flex: 1;
-    display: grid;
-    place-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
     padding: var(--space-3);
     color: var(--color-text-muted);
     text-align: center;
   }
 
+  .empty p {
+    margin: 0;
+  }
+
+  .hint {
+    font-size: 0.875em;
+  }
+
   .error {
     color: var(--color-warning);
+  }
+
+  .banner {
+    display: flex;
+    align-items: start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    color: var(--color-warning);
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-warning);
+  }
+
+  .banner span {
+    flex: 1;
+  }
+
+  .banner button {
+    padding: 0 var(--space-2);
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+
+  .drop-overlay {
+    position: absolute;
+    inset: var(--space-2);
+    display: grid;
+    place-items: center;
+    padding: var(--space-3);
+    text-align: center;
+    color: var(--color-text);
+    background: var(--color-surface);
+    border: 2px dashed var(--color-text-muted);
+    border-radius: var(--radius-1);
+    opacity: 0.95;
+    pointer-events: none;
   }
 </style>

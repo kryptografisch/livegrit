@@ -17,14 +17,18 @@ import type {
 } from 'livesplit-core';
 import { rafTicker, type Ticker } from '../ticker';
 import {
+  comparisonNames,
   core,
   createDefaultLayout,
   createTimer,
   initCore,
   parseRun,
+  runHasGameTime,
+  saveRunAsLss,
   type WasmSource,
 } from './core';
 import { toLayoutView, type LayoutView } from './layoutView';
+import { lssFileName } from './lss';
 
 export type Phase = 'NotRunning' | 'Running' | 'Ended' | 'Paused';
 
@@ -34,6 +38,8 @@ const phases: Record<number, Phase> = {
   2: 'Ended',
   3: 'Paused',
 };
+
+export type TimingMethodName = 'RealTime' | 'GameTime';
 
 export const DEFAULT_VISIBLE_ROWS = 10;
 
@@ -48,6 +54,13 @@ export class TimerStore {
   phase = $state<Phase>('NotRunning');
   /** True once the core is loaded and the store renders. */
   ready = $state(false);
+  /** Comparisons the loaded run offers (custom + generated), in the core's order. */
+  comparisons = $state.raw<string[]>([]);
+  /** The current comparison (e.g. "Personal Best"). */
+  comparison = $state('');
+  timingMethod = $state<TimingMethodName>('RealTime');
+  /** Whether the run has any Game Time; the timing method toggle is only offered then. */
+  hasGameTime = $state(false);
 
   /**
    * Called after a successful reset, with the timer (its run already contains the attempt).
@@ -119,6 +132,7 @@ export class TimerStore {
     const timer = createTimer(run);
     this.#timer?.[Symbol.dispose]();
     this.#timer = timer;
+    this.#syncRunInfo();
     this.#invalidate();
     this.render();
     // Drop icons of the previous run that the new state no longer references.
@@ -150,7 +164,39 @@ export class TimerStore {
   /** Resets and stores the attempt in the run's history (updates PB/golds like LiveSplit). */
   reset(): void {
     const ok = this.#command((t) => t.reset(true));
-    if (ok && this.#timer) this.onReset?.(this.#timer);
+    if (ok && this.#timer) {
+      this.#syncRunInfo();
+      this.onReset?.(this.#timer);
+    }
+  }
+
+  /** Switches the comparison; returns false if the run doesn't have it. */
+  setComparison(name: string): boolean {
+    return this.#command((t) => t.setCurrentComparison(name));
+  }
+
+  /**
+   * Switches between Real Time and Game Time. Note: the core only records Game Time for
+   * an attempt when something initializes it (load removal / auto splitter), which the
+   * browser can't, so live attempts have no Game Time; the comparisons still show it.
+   */
+  setTimingMethod(method: TimingMethodName): void {
+    const timer = this.#timer;
+    if (!timer) return;
+    const { TimingMethod } = core();
+    timer.setCurrentTimingMethod(TimingMethod[method]);
+    this.#invalidate();
+  }
+
+  /**
+   * The run as .lss text plus a file name (`Game - Category.lss`), or `null` without a run.
+   * Includes the attempt history and, like LiveSplit, the state of a running attempt.
+   */
+  exportLss(): { text: string; fileName: string } | null {
+    const timer = this.#timer;
+    if (!timer) return null;
+    const run = timer.getRun();
+    return { text: saveRunAsLss(timer), fileName: lssFileName(run.gameName(), run.categoryName()) };
   }
 
   /** Scrolls the split window (only has an effect when not all rows are visible). */
@@ -190,6 +236,10 @@ export class TimerStore {
     this.#initializing = null;
     this.view = null;
     this.phase = 'NotRunning';
+    this.comparisons = [];
+    this.comparison = '';
+    this.timingMethod = 'RealTime';
+    this.hasGameTime = false;
     this.ready = false;
   }
 
@@ -204,7 +254,21 @@ export class TimerStore {
 
   #invalidate(): void {
     this.#dirty = true;
-    if (this.#timer) this.phase = phases[this.#timer.currentPhase()] ?? 'NotRunning';
+    const timer = this.#timer;
+    if (!timer) return;
+    this.phase = phases[timer.currentPhase()] ?? 'NotRunning';
+    this.comparison = timer.currentComparison();
+    this.timingMethod =
+      timer.currentTimingMethod() === core().TimingMethod.GameTime ? 'GameTime' : 'RealTime';
+  }
+
+  /** Run data that only changes with a new run or a reset (not per frame). */
+  #syncRunInfo(): void {
+    const timer = this.#timer;
+    if (!timer) return;
+    const run = timer.getRun();
+    this.comparisons = comparisonNames(run);
+    this.hasGameTime = runHasGameTime(run);
   }
 
   #requireInit(): void {

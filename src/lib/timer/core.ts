@@ -64,13 +64,20 @@ export function parseRun(input: string | Uint8Array): Run {
   return result.unwrap(); // consumes `result`
 }
 
+export class EmptyRunError extends Error {
+  constructor(message = 'The run has no segments.') {
+    super(message);
+    this.name = 'EmptyRunError';
+  }
+}
+
 /**
  * Creates a Timer for the run. **Consumes `run`** (also when it fails), so don't use or
- * dispose it afterwards. Throws if the run has no segments.
+ * dispose it afterwards. Throws `EmptyRunError` if the run has no segments.
  */
 export function createTimer(run: Run): Timer {
   const timer = core().Timer.new(run);
-  if (!timer) throw new Error('A run needs at least one segment to create a timer.');
+  if (!timer) throw new EmptyRunError();
   return timer;
 }
 
@@ -84,6 +91,27 @@ export function segmentNames(run: RunRef): string[] {
   const names: string[] = [];
   for (let i = 0; i < run.len(); i++) names.push(run.segment(i).name());
   return names;
+}
+
+/** All comparisons the run offers (custom ones + the generated ones), in the core's order. */
+export function comparisonNames(run: RunRef): string[] {
+  const names: string[] = [];
+  for (let i = 0; i < run.comparisonsLen(); i++) names.push(run.comparison(i));
+  return names;
+}
+
+/**
+ * Whether the run has any Game Time (there's no flag in the core): a PB split time or a
+ * best segment with Game Time. `TimeRef`s share one output slot, so each value is read out
+ * right away.
+ */
+export function runHasGameTime(run: RunRef): boolean {
+  for (let i = 0; i < run.len(); i++) {
+    const segment = run.segment(i);
+    if (segment.personalBestSplitTime().gameTime() !== null) return true;
+    if (segment.bestSegmentTime().gameTime() !== null) return true;
+  }
+  return false;
 }
 
 export interface LayoutOptions {

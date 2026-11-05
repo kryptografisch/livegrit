@@ -186,6 +186,37 @@ describe('timer store', () => {
     expect(store.view?.splits?.rows.length).toBe(store.timer!.getRun().len());
   });
 
+  it('lists the comparisons of the run and switches between them', () => {
+    expect(store.comparisons).toContain('Personal Best');
+    expect(store.comparisons).toContain('Best Segments');
+    expect(store.comparisons).toContain('Goal'); // custom comparison of the fixture
+    expect(store.comparison).toBe('Personal Best');
+
+    expect(store.setComparison('Best Segments')).toBe(true);
+    expect(store.comparison).toBe('Best Segments');
+    expect(store.setComparison('Does Not Exist')).toBe(false);
+    expect(store.comparison).toBe('Best Segments');
+  });
+
+  it('only offers game time when the run has it', async () => {
+    expect(store.hasGameTime).toBe(false);
+    store.loadSplits(await fixture('game-time.lss'));
+    expect(store.hasGameTime).toBe(true);
+    expect(store.timingMethod).toBe('RealTime');
+
+    ticker.tick();
+    const realSob = store.view?.info.find((i) => i.key === 'Sum of Best Segments')?.value;
+    store.setTimingMethod('GameTime');
+    expect(store.timingMethod).toBe('GameTime');
+    ticker.tick();
+    const gameSob = store.view?.info.find((i) => i.key === 'Sum of Best Segments')?.value;
+    expect(gameSob).toBeTruthy();
+    expect(gameSob).not.toBe(realSob);
+
+    store.setTimingMethod('RealTime');
+    expect(store.timingMethod).toBe('RealTime');
+  });
+
   it('stops ticking and frees everything on destroy', () => {
     store.destroy();
     expect(ticker.listenerCount).toBe(0);

@@ -2,6 +2,14 @@
   import { router } from './lib/router.svelte';
   import TimerPage from './pages/TimerPage.svelte';
   import ControlsPage from './pages/ControlsPage.svelte';
+  import { timerStore } from './lib/timer/timerStore.svelte';
+  import { wakeLock } from './lib/wakeLock';
+
+  // Keep the screen awake while an attempt is running, on every page. Released on pause,
+  // reset and finish (the phase is no longer 'Running').
+  $effect(() => {
+    wakeLock.setActive(timerStore.phase === 'Running');
+  });
 </script>
 
 <div class="shell">
