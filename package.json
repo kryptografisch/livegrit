@@ -18,7 +18,8 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "idb": "8.0.4"
+    "idb": "8.0.4",
+    "livesplit-core": "file:./vendor/livesplit-core"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "7.3.1",

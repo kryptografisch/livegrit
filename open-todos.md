@@ -96,15 +96,24 @@ Notes / deviations:
 
 ## Step 3: Core wrapper + smoke test
 
-- [ ] Add `"livesplit-core": "file:./vendor/livesplit-core"` to `package.json` and ask permission to run `npm install`.
-- [ ] `src/lib/timer/core.ts`: load the WASM once (`init()`), expose typed helpers based on `API-NOTES.md`: `parseRun(text)`, `createTimer(run)`, `saveRunAsLss(timer)`, plus a default `Layout` built in code (title, splits, timer, previous segment, sum of best, possible time save).
-- [ ] Confirm that the `.wasm` loads in the Vite dev server **and** in `vite build && vite preview` with MIME type `application/wasm`. Add the wasm/TLA plugins only if needed and record that in Decisions.
-- [ ] Vitest smoke test (Node): read `tests/fixtures/real-time.lss`, parse it, create a Timer, start, split, read the current time > 0, save to `.lss`, re-parse, and check that the segment names are equal. In Node, initialize with the wasm bytes from `fs`.
+- [x] Add `"livesplit-core": "file:./vendor/livesplit-core"` to `package.json` and ask permission to run `npm install`.
+- [x] `src/lib/timer/core.ts`: load the WASM once (`init()`), expose typed helpers based on `API-NOTES.md`: `parseRun(text)`, `createTimer(run)`, `saveRunAsLss(timer)`, plus a default `Layout` built in code (title, splits, timer, previous segment, sum of best, possible time save).
+- [x] Confirm that the `.wasm` loads in the Vite dev server **and** in `vite build && vite preview` with MIME type `application/wasm`. Add the wasm/TLA plugins only if needed and record that in Decisions.
+- [x] Vitest smoke test (Node): read `tests/fixtures/real-time.lss`, parse it, create a Timer, start, split, read the current time > 0, save to `.lss`, re-parse, and check that the segment names are equal. In Node, initialize with the wasm bytes from `fs`.
 
 **Acceptance:** smoke test green; the browser console shows the parsed game name on the Timer page.
 **Commit:** `feat(core): livesplit-core wrapper and smoke test`
 
 Notes / deviations:
+
+- Done. `npm install` only symlinks `node_modules/livesplit-core` → `vendor/livesplit-core`.
+- Loading: there's no `init()` to call (the package loads its wasm with top-level await on import). `core.ts` therefore imports `livesplit-core` **only dynamically**, in `initCore(wasm?)` (memoized promise); everything else uses `import type`. `core()` returns the loaded module synchronously (throws before init). In Node the wasm bytes are passed to `initCore(bytes)`, which sets `globalThis.__lscPreload`. Side effect: Vite puts the core in its own lazy chunk (`livesplit-core-*.js`, 68 kB + 1.3 MB wasm).
+- Helpers: `initCore`, `core`, `parseRun(string | Uint8Array)` (throws `RunParseError`), `createTimer(run)` (consumes the run, also on failure; throws for 0 segments), `saveRunAsLss(timer)`, `segmentNames(run)`, `createDefaultLayout()`.
+- `Symbol.dispose` polyfill in `src/lib/timer/disposePolyfill.ts`, imported first by `core.ts`. `tsconfig.json` `lib` += `ESNext.Disposable`.
+- No wasm/TLA plugins needed. Added `optimizeDeps.exclude: ['livesplit-core']` in `vite.config.ts` as a safeguard, so dep pre-bundling never moves the glue away from its `.wasm` (linked packages aren't pre-bundled anyway).
+- Verified with curl: dev server and `vite preview` both serve the wasm as `application/wasm` (200). The fixture text isn't in the production bundle (dev-only `?raw` import).
+- Timer page: `initCore()` on mount in all modes (otherwise the build tree-shakes the core away and preview can't be checked); in dev it also logs `[livesplit-core] parsed run: Pixel Quest / …`. Step 4 replaces this.
+- Tests: `tests/core.test.ts` (init once; the smoke round trip; default layout renders Title, Splits, Timer + 3 KeyValue; `invalid.lss` → `RunParseError`). `check`, `test` (6/6), `build` clean.
 
 ---
 

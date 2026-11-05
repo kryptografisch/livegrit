@@ -1,5 +1,23 @@
 <script lang="ts">
   // Placeholder. Step 4 renders the livesplit-core layout state here.
+  import { onMount } from 'svelte';
+  import { initCore, parseRun } from '../lib/timer/core';
+
+  onMount(() => {
+    // Step 3 smoke check: load the core (all modes), and in dev log the fixture's game name.
+    // Replaced by the timer store in step 4.
+    void (async () => {
+      await initCore();
+      if (!import.meta.env.DEV) return;
+      const { default: text } = await import('../../tests/fixtures/real-time.lss?raw');
+      const run = parseRun(text);
+      try {
+        console.info(`[livesplit-core] parsed run: ${run.gameName()} / ${run.categoryName()}`);
+      } finally {
+        run[Symbol.dispose]();
+      }
+    })().catch((error: unknown) => console.error('[livesplit-core] failed to load', error));
+  });
 </script>
 
 <section class="timer-page">
