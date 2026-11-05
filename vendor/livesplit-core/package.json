@@ -1,0 +1,31 @@
+{
+  "name": "livesplit-core",
+  "version": "0.13.0-split-lite",
+  "description": "livesplit-core compiled to WebAssembly (wasm-bindgen --target web) with generated TypeScript bindings. Built by scripts/build-livesplit-core.sh; see BUILD-INFO.md.",
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./preload": {
+      "types": "./preload.d.ts",
+      "default": "./preload.js"
+    },
+    "./livesplit_core_bg.wasm": "./livesplit_core_bg.wasm",
+    "./package.json": "./package.json"
+  },
+  "sideEffects": true,
+  "files": [
+    "*.js",
+    "*.d.ts",
+    "*.ts",
+    "livesplit_core_bg.wasm",
+    "LICENSE-*",
+    "*.md"
+  ]
+}

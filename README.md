@@ -37,13 +37,26 @@ src/
     ui/                    small presentational components
   pages/                   TimerPage, ControlsPage
   styles/                  tokens.css (all design tokens), global.css
-tests/                     Vitest tests; fixtures/ holds sample .lss files
+tests/                     Vitest tests; fixtures/ holds our own generated .lss files
 vendor/                    built livesplit-core package (WASM + JS bindings)
 scripts/                   build scripts (livesplit-core via Podman)
 docs/                      reference docs
 ```
 
+## Rebuilding livesplit-core
+
+The built core (WASM + JS/TS bindings) is committed in `vendor/livesplit-core/`, so you don't need Rust.
+To rebuild it (newer livesplit-core, other features), run `scripts/build-livesplit-core.sh`. It needs only Podman.
+The pinned commit, toolchain versions and features are listed in `vendor/livesplit-core/BUILD-INFO.md`.
+See [docs/build-livesplit-core.md](docs/build-livesplit-core.md) for details.
+
 ## Styling
 
 All colors, fonts, sizes and spacing are CSS custom properties in `src/styles/tokens.css`.
 Components don't hard-code colors, so a new design can be applied by changing the tokens.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
+
+Exception: `vendor/livesplit-core/` is the built [livesplit-core](https://github.com/LiveSplit/livesplit-core), licensed under MIT or Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE` in that folder).
