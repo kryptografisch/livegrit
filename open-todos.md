@@ -25,6 +25,7 @@ When a step is done, tick its checkboxes, fill in "Notes / deviations" under tha
 | npm installs           | Claude writes `package.json` with exact (pinned) versions, then **asks permission** to run `npm install`. Claude never installs anything silently.                                                                                                                                                                                                                                               |
 | Tests                  | Vitest from step 2 on.                                                                                                                                                                                                                                                                                                                                                                           |
 | Temp files             | Use `tmp/` in this project (git-ignored).                                                                                                                                                                                                                                                                                                                                                        |
+| Pages                  | Two pages: **Timer** (minimal: only what's needed during a run) and **Settings** (sections: Controls, Runs (.lss import/export), Timer). Steps 6–11 still build on the "Controls" page; step 12 renames it to Settings and regroups everything. Temporary controls on the Timer page (step 5 toolbar, Rows input) are removed in step 12.                                                        |
 
 ---
 
@@ -251,7 +252,28 @@ Notes / deviations:
 
 ---
 
-## Step 12: Prototype wrap-up
+## Step 12: Settings page (replaces Controls) + minimal Timer page
+
+**Goal:** the Timer page shows only what you need during a run. Everything else lives on one Settings page with clear sections. This step only moves and groups existing features; it adds no new ones.
+
+- [ ] Rename `ControlsPage.svelte` → `SettingsPage.svelte`, route `#/controls` → `#/settings` (redirect the old hash), nav label "Settings". Update code comments/README that say "Controls page".
+- [ ] Settings page sections (one scrolling page, each section with a heading and an anchor; a small section nav at the top on narrow screens):
+  - **Controls**: bindings table + capture mode (step 8), gamepad panel (step 7/8), focus-limitation warning.
+  - **Runs (.lss import/export)**: import `.lss`, prominent "Export backup" (current run), saved runs list, "New empty run", storage status (all from step 10). Drag-and-drop import works here too.
+  - **Timer**: comparison, timing method (only if the run has game time), visible split rows. (Not controls and not runs; merge into another section if the developer prefers.)
+- [ ] Timer page minimal: header, split list, big timer, footer (previous segment, sum of best, possible time save). Remove the temporary `RunToolbar` and the "Rows" input. The on-screen action buttons stay behind the step 6 toggle (touch).
+- [ ] Empty Timer page: "Import a .lss file or create a new run" with an Import button and a link to Settings → Runs. Nothing else.
+- [ ] Drag-and-drop import moves from `TimerPage` to `App.svelte` (works on every page; still refused during an attempt). Import errors show as a dismissible message on the page where the drop happened.
+- [ ] Update the Decisions table (pages) and the tests that touch moved code.
+
+**Acceptance:** during a run the Timer page has no settings controls; every setting from steps 5–11 is reachable on the Settings page in the right section; `check`, `test`, `build` clean.
+**Commit:** `refactor(ui): settings page with sections, minimal timer page`
+
+Notes / deviations:
+
+---
+
+## Step 13: Prototype wrap-up
 
 - [ ] README complete: install, dev, build, test, rebuilding livesplit-core (Podman), browser limitations (focus, Safari 7-day eviction).
 - [ ] `CHANGELOG.md`: deviations from plan.md and why (collect them from the "Notes / deviations" of each step).
