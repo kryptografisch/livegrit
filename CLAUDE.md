@@ -6,6 +6,7 @@
 - do not install python or perl plugins or addons
 - never install libararies yourself. always ask if that is the wanted way to do it
 - use the tmp folder in this project
+- do not start a server, do not run a (headless) browser, do not take screenshots or videos to analyze. the developer will check results and report back. you can start a server from commandline for checks.
 
 # PROJECT
 
