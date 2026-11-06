@@ -93,6 +93,7 @@ describe('SplitterDb', () => {
     settings.showButtons = false;
     settings.lastRunId = 'abc';
     settings.persistRequested = true;
+    settings.installBarDismissed = true;
     await db.putSettings(settings);
     expect(await db.getSettings()).toEqual(settings);
   });
@@ -135,6 +136,7 @@ describe('parseSettings', () => {
       showButtons: 'yes',
       lastRunId: 42,
       persistRequested: 'true',
+      installBarDismissed: 1,
     });
     expect(parsed).toEqual(defaultSettings());
 

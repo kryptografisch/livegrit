@@ -8,6 +8,14 @@
   import { gamepadSource, inputManager, keyboardSource } from './lib/input/appInput';
   import { appStorage } from './lib/storage/appStorage';
   import { modals } from './lib/ui/modal.svelte';
+  import { startPwa } from './lib/pwa/appPwa';
+  import UpdatePrompt from './lib/ui/UpdatePrompt.svelte';
+  import InstallPrompt from './lib/ui/InstallPrompt.svelte';
+
+  // Service worker: offline start and the "Update available" prompt (never mid-run).
+  $effect(() => {
+    startPwa();
+  });
 
   // Restore the settings and the last run (on every start page), then keep them saved.
   // A core load error is shown by the Timer page.
@@ -38,11 +46,13 @@
 </script>
 
 <div class="shell">
+  <InstallPrompt />
   <nav class="nav">
     <a href="#/" class:active={router.route === 'timer'}>Timer</a>
     <a href="#/controls" class:active={router.route === 'controls'}>Controls</a>
     <a href="#/data" class:active={router.route === 'data'}>Data</a>
   </nav>
+  <UpdatePrompt />
 
   <main class="page">
     {#if router.route === 'controls'}

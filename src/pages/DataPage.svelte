@@ -10,6 +10,8 @@
   import NewRunForm from '../lib/ui/NewRunForm.svelte';
   import RunList from '../lib/ui/RunList.svelte';
   import StoragePanel from '../lib/ui/StoragePanel.svelte';
+  import InstallButton from '../lib/ui/InstallButton.svelte';
+  import { pwaInstall } from '../lib/pwa/appPwa';
 
   const imports = new ImportFlow(appStorage);
   /** The last create result; import results come from `imports`. */
@@ -69,6 +71,17 @@
       <p class="muted" class:error={message === imports.error} role="status">{message}</p>
     {/if}
 
+    {#if !pwaInstall.installed}
+      <h2>Progressive Web App</h2>
+      <div class="install">
+        <InstallButton />
+        <p>
+          Install split-lite as an app on your desktop or home screen: it opens in its own window
+          and starts offline.
+        </p>
+      </div>
+    {/if}
+
     <h2>Storage</h2>
     <StoragePanel available={appStorage.available} />
   {/if}
@@ -95,6 +108,18 @@
     flex-wrap: wrap;
     gap: var(--space-2);
     margin-top: var(--space-4);
+  }
+
+  .install {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+  }
+
+  .install p {
+    flex: 1 1 16rem;
+    margin: 0;
   }
 
   /* The open form takes the whole row. */

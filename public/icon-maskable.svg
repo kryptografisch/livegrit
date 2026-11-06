@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Maskable/apple-touch variant of icon.svg: full-bleed background, the drawing scaled
+       into the safe zone (a centered circle of radius 205). -->
+  <rect width="512" height="512" fill="#161616"/>
+  <g transform="translate(256 256) scale(0.82) translate(-256 -270)">
+    <g fill="none" stroke-linecap="round">
+      <path d="M226 78h60M256 78v52" stroke="#f2f2f2" stroke-width="32"/>
+      <path d="M378 140l26-26" stroke="#f2f2f2" stroke-width="28"/>
+      <circle cx="256" cy="290" r="150" stroke="#f2f2f2" stroke-width="36"/>
+      <path d="M256 290l78-70" stroke="#16a6ff" stroke-width="32"/>
+    </g>
+    <circle cx="256" cy="290" r="26" fill="#16a6ff"/>
+  </g>
+</svg>

@@ -3,6 +3,7 @@
   // the reminder that an .lss export is the real backup.
   import { estimate, persist, persisted, type StorageEstimateInfo } from '../storage/persist';
   import { formatBytes, formatPercent, usagePercent } from './format';
+  import { pwaUpdate } from '../pwa/appPwa';
 
   let { available }: { available: boolean } = $props();
 
@@ -38,6 +39,14 @@
     }
   }
 
+  const offlineText = $derived(
+    {
+      ready: 'yes, the app starts without a connection',
+      pending: 'not yet, the app is still being cached',
+      unsupported: 'no (needs the built app over https or localhost)',
+    }[pwaUpdate.offline],
+  );
+
   const persistedText = $derived(
     isPersisted === undefined
       ? '…'
@@ -52,6 +61,8 @@
 <dl class="status">
   <dt>Saving</dt>
   <dd>{available ? 'yes, in this browser (IndexedDB)' : 'not available, only in memory'}</dd>
+  <dt>Offline</dt>
+  <dd>{offlineText}</dd>
   <dt>Persistent</dt>
   <dd>{persistedText}</dd>
   <dt>Used</dt>

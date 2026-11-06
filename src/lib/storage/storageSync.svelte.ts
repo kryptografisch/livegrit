@@ -94,6 +94,8 @@ export class StorageSync {
   available = $state(false);
   /** The saved runs, the most recently saved first. Updated after every change. */
   runs = $state.raw<RunSummary[]>([]);
+  /** "+ Install" in the bar above the nav was clicked once: the bar never shows again. */
+  installBarDismissed = $state(false);
 
   readonly #store: TimerStore;
   readonly #input: InputManager;
@@ -150,6 +152,9 @@ export class StorageSync {
     const settings = this.#settings;
     this.#input.bindings = settings.bindings;
     if (settings.showButtons !== null) this.#ui.showButtons = settings.showButtons;
+    // Clicked before the restore finished: keep it dismissed.
+    if (this.installBarDismissed) settings.installBarDismissed = true;
+    this.installBarDismissed = settings.installBarDismissed;
     this.#applying = true;
     try {
       this.#store.visibleRows = settings.visibleRows;
@@ -440,6 +445,14 @@ export class StorageSync {
   setShowButtons(show: boolean): void {
     this.#ui.showButtons = show;
     this.#settings.showButtons = show;
+    void this.#saveSettings();
+  }
+
+  /** Hides the install bar above the nav for good (the Data page keeps its own button). */
+  dismissInstallBar(): void {
+    if (this.installBarDismissed) return;
+    this.installBarDismissed = true;
+    this.#settings.installBarDismissed = true;
     void this.#saveSettings();
   }
 

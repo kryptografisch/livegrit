@@ -202,6 +202,18 @@ describe('StorageSync', () => {
     expect(again.ui.showButtons).toBe(false);
   });
 
+  it('keeps the install bar dismissed after a reload', async () => {
+    const app = await startApp();
+    expect(app.sync.installBarDismissed).toBe(false);
+    app.sync.dismissInstallBar();
+    expect(app.sync.installBarDismissed).toBe(true);
+    await settle();
+
+    const again = await startApp();
+    expect(again.sync.installBarDismissed).toBe(true);
+    expect((await readDb((db) => db.getSettings())).installBarDismissed).toBe(true);
+  });
+
   it('applies the stored comparison and timing method to restored and imported runs', async () => {
     const app = await startApp();
     await app.sync.importFile(await file('game-time.lss'));

@@ -12,5 +12,6 @@ package-lock.json
 # data and downloaded docs (keep byte-exact)
 tests/fixtures/
 docs/llms-*.txt
+docs/vite-plugin-pwa/
 
 tmp/

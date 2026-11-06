@@ -29,6 +29,8 @@ export interface Settings {
   lastRunId: string | null;
   /** Whether persistent storage was already requested automatically (only asked once). */
   persistRequested: boolean;
+  /** The install bar above the nav was used once ("+ Install" clicked): never shown again. */
+  installBarDismissed: boolean;
 }
 
 export function defaultSettings(): Settings {
@@ -40,6 +42,7 @@ export function defaultSettings(): Settings {
     showButtons: null,
     lastRunId: null,
     persistRequested: false,
+    installBarDismissed: false,
   };
 }
 
@@ -53,6 +56,7 @@ export interface StoredSettings {
   showButtons: boolean | null;
   lastRunId: string | null;
   persistRequested: boolean;
+  installBarDismissed: boolean;
 }
 
 export function serializeSettings(settings: Settings): StoredSettings {
@@ -65,6 +69,7 @@ export function serializeSettings(settings: Settings): StoredSettings {
     showButtons: settings.showButtons,
     lastRunId: settings.lastRunId,
     persistRequested: settings.persistRequested,
+    installBarDismissed: settings.installBarDismissed,
   };
 }
 
@@ -92,6 +97,7 @@ export function parseSettings(data: unknown): Settings {
     out.lastRunId = data.lastRunId;
   }
   if (data.persistRequested === true) out.persistRequested = true;
+  if (data.installBarDismissed === true) out.installBarDismissed = true;
   return out;
 }
 
