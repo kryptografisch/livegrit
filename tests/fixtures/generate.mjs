@@ -1,4 +1,4 @@
-// Generates split-lite's own .lss test fixtures with internally consistent data.
+// Generates LiveGrit's own .lss test fixtures with internally consistent data.
 // Usage: node tests/fixtures/generate.mjs   (writes next to this file)
 import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

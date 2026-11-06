@@ -1,6 +1,6 @@
 # Building livesplit-core (WASM)
 
-split-lite uses [livesplit-core](https://github.com/LiveSplit/livesplit-core) compiled to WebAssembly for all timing and split logic.
+LiveGrit uses [livesplit-core](https://github.com/LiveSplit/livesplit-core) compiled to WebAssembly for all timing and split logic.
 The npm package `livesplit-core` is a stale 2018 build, so we build the core ourselves and commit the result to `vendor/livesplit-core/`.
 You only need to rebuild when you want a newer livesplit-core, other features or a different toolchain.
 Normal app development doesn't need any of this.
@@ -23,7 +23,7 @@ scripts/build-livesplit-core.sh --update-lock   # re-resolve Cargo.lock (after b
 
 The script:
 
-1. Builds the image `localhost/split-lite-lsc-builder:…` from `scripts/livesplit-core.Containerfile`: the Rust image, the `wasm32-unknown-unknown` target, `wasm-bindgen-cli` (pinned version), and Node + TypeScript (pinned) copied from the official Node image.
+1. Builds the image `localhost/live-grit-lsc-builder:…` from `scripts/livesplit-core.Containerfile`: the Rust image, the `wasm32-unknown-unknown` target, `wasm-bindgen-cli` (pinned version), and Node + TypeScript (pinned) copied from the official Node image.
 2. Runs the container with the inner script `scripts/livesplit-core-build-inner.sh`, which:
    - fetches **only** the pinned commit `LSC_COMMIT` (shallow) into the cache volume,
    - reuses `vendor/livesplit-core/Cargo.lock` (or generates a fresh one with `--update-lock` / on first run) and builds with `--locked`,
@@ -36,12 +36,12 @@ The script:
 
 Two named volumes keep rebuilds fast:
 
-| Volume                 | Mounted at                  | Holds                                           |
-| ---------------------- | --------------------------- | ----------------------------------------------- |
-| `split-lite-lsc-build` | `/build`                    | source checkout, cargo target dir, staging dirs |
-| `split-lite-lsc-cargo` | `/usr/local/cargo/registry` | crates.io download cache                        |
+| Volume                | Mounted at                  | Holds                                           |
+| --------------------- | --------------------------- | ----------------------------------------------- |
+| `live-grit-lsc-build` | `/build`                    | source checkout, cargo target dir, staging dirs |
+| `live-grit-lsc-cargo` | `/usr/local/cargo/registry` | crates.io download cache                        |
 
-Remove them with `--clean` or `podman volume rm split-lite-lsc-build split-lite-lsc-cargo`.
+Remove them with `--clean` or `podman volume rm live-grit-lsc-build live-grit-lsc-cargo`.
 
 ## Pinned inputs
 

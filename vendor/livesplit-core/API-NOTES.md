@@ -1,4 +1,4 @@
-# livesplit-core API notes (split-lite)
+# livesplit-core API notes (LiveGrit)
 
 Hand-written. The source of truth for the API names used by the app, taken from the generated `index.d.ts` of the build in `BUILD-INFO.md` (commit `f348cf69`).
 If something isn't listed here, read `index.d.ts`; don't guess. Update this file whenever the core is rebuilt.

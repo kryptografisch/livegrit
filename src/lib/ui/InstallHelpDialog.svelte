@@ -61,7 +61,7 @@
     {/if}
     {#if !help.unsupported}
       <p class="note">
-        Once installed, split-lite opens in its own window and starts offline. Your splits stay the
+        Once installed, LiveGrit opens in its own window and starts offline. Your splits stay the
         same.
       </p>
     {/if}

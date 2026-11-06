@@ -15,9 +15,9 @@ NODE_IMAGE="docker.io/library/node:24.19.0-trixie-slim"
 WASM_BINDGEN_VERSION="0.2.130" # must equal the wasm-bindgen crate in Cargo.lock
 TYPESCRIPT_VERSION="6.0.3"     # same as the app's devDependency
 
-IMAGE_TAG="localhost/split-lite-lsc-builder:rust-1.99.1-wb-${WASM_BINDGEN_VERSION}"
-VOLUME_BUILD="split-lite-lsc-build" # source checkout + cargo target dir
-VOLUME_CARGO="split-lite-lsc-cargo" # crates.io registry cache
+IMAGE_TAG="localhost/live-grit-lsc-builder:rust-1.99.1-wb-${WASM_BINDGEN_VERSION}"
+VOLUME_BUILD="live-grit-lsc-build" # source checkout + cargo target dir
+VOLUME_CARGO="live-grit-lsc-cargo" # crates.io registry cache
 # -----------------------------------------------------------------------------
 
 usage() {

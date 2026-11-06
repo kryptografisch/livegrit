@@ -26,7 +26,7 @@ export interface BrowserInfo {
 }
 
 const NOT_INSTALLED_HINT =
-  'No such option? The app may already be installed: look for split-lite among your apps.';
+  'No such option? The app may already be installed: look for LiveGrit among your apps.';
 
 export function installHelp({ userAgent: ua, maxTouchPoints, secure }: BrowserInfo): InstallHelp {
   const help = detect(ua, maxTouchPoints);
@@ -50,7 +50,7 @@ function detect(ua: string, maxTouchPoints: number): InstallHelp {
         steps: [
           'Tap the Share button (Chrome and Edge: in the address bar; Firefox: in the menu ☰).',
           'Choose "Add to Home Screen" (scroll down if needed).',
-          'Tap "Add". Start split-lite from the home screen icon.',
+          'Tap "Add". Start LiveGrit from the home screen icon.',
         ],
         note: 'Needs iOS 16.4 or newer. On older versions use Safari.',
       };
@@ -60,7 +60,7 @@ function detect(ua: string, maxTouchPoints: number): InstallHelp {
       steps: [
         'Tap the Share button (the square with the arrow).',
         'Choose "Add to Home Screen" (scroll down if needed).',
-        'Tap "Add". Start split-lite from the home screen icon.',
+        'Tap "Add". Start LiveGrit from the home screen icon.',
       ],
     };
   }
@@ -92,7 +92,7 @@ function detect(ua: string, maxTouchPoints: number): InstallHelp {
       browser: 'Firefox',
       unsupported: 'Unfortunately, Firefox does not support installing progressive web apps.',
       steps: [],
-      tip: 'You can still use split-lite right here in the browser: just add it as a bookmark.',
+      tip: 'You can still use LiveGrit right here in the browser: just add it as a bookmark.',
     };
   }
   if (/Edg\//.test(ua)) {
@@ -100,7 +100,7 @@ function detect(ua: string, maxTouchPoints: number): InstallHelp {
       browser: 'Edge',
       steps: [
         'Click the install icon at the right of the address bar, or',
-        'open the menu … → "Apps" → "Install split-lite".',
+        'open the menu … → "Apps" → "Install LiveGrit".',
       ],
       note: NOT_INSTALLED_HINT,
     };
@@ -127,7 +127,7 @@ function detect(ua: string, maxTouchPoints: number): InstallHelp {
       browser: 'Safari on Mac',
       steps: [
         'Open the File menu (or the Share button) and choose "Add to Dock…".',
-        'Click "Add". Start split-lite from the Dock or Launchpad.',
+        'Click "Add". Start LiveGrit from the Dock or Launchpad.',
       ],
       note: 'Needs macOS Sonoma (Safari 17) or newer.',
     };

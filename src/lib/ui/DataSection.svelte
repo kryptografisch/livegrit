@@ -18,7 +18,7 @@
     <div class="install">
       <InstallButton />
       <p>
-        Install split-lite as an app on your desktop or home screen: it opens in its own window and
+        Install LiveGrit as an app on your desktop or home screen: it opens in its own window and
         starts offline.
       </p>
     </div>

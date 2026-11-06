@@ -17,7 +17,7 @@ const backgroundColor = token('color-bg'); // the splash screen
 /** Replaces `%THEME_COLOR%` in index.html (must match the manifest's `theme_color`). */
 function themeColorHtml(): Plugin {
   return {
-    name: 'split-lite:theme-color',
+    name: 'live-grit:theme-color',
     transformIndexHtml: {
       order: 'pre',
       handler: (html) => html.replaceAll('%THEME_COLOR%', themeColor),
@@ -37,8 +37,8 @@ export default defineConfig({
       // public/ icons are precached by `globPatterns` already (no duplicate entries).
       includeManifestIcons: false,
       manifest: {
-        name: 'split-lite',
-        short_name: 'split-lite',
+        name: 'LiveGrit',
+        short_name: 'LiveGrit',
         description: 'Speedrun split timer that runs in the browser and offline.',
         display: 'standalone',
         start_url: '.',
