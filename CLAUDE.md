@@ -13,7 +13,8 @@
 Browser-only PWA speedrun split timer (LiveSplit-like): Svelte 5 (runes) + TypeScript + Vite, timing/split logic from livesplit-core compiled to WASM.
 
 - `plan.md`: full spec (goal, architecture, features). Where it conflicts with `open-todos.md` → Decisions, the Decisions win.
-- `open-todos.md`: the step-by-step work. Each session works on **one** step the developer names. When done, tick the boxes and fill in that step's "Notes / deviations". The developer commits after each step.
+- `open-todos.md`: the step-by-step work of the prototype (steps 1–13, done). Its Decisions and "Notes / deviations" record what was decided and why; read them before changing a feature. If the developer names a new step, add it there, and when done, tick the boxes and fill in its "Notes / deviations". The developer commits after each step.
+- `docs/future-features.md`: everything after the prototype (design pass, hardening, known limits, optional ideas). Add new "later" items there, not to `open-todos.md`.
 - `docs/`: local reference docs (e.g. `docs/llms-small.txt` = Svelte 5). Use them instead of memory for Svelte 5 APIs. Missing docs: ask the developer or fetch on demand.
 - `vendor/livesplit-core/API-NOTES.md` (after step 1): the source of truth for livesplit-core API names. Read the generated `.d.ts` if unsure; never guess.
 - `livesplit-core-master/`, `LiveSplitOne-master/`: local read-only references, git-ignored. Never depend on them in code or scripts. LiveSplit One is just an idea source; don't copy its code.

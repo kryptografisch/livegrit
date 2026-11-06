@@ -387,19 +387,15 @@ Notes / deviations:
 
 ## Step 13: Prototype wrap-up
 
-- [ ] README complete: install, dev, build, test, rebuilding livesplit-core (Podman), browser limitations (Safari 7-day eviction).
-- [ ] `CHANGELOG.md`: deviations from plan.md and why (collect them from the "Notes / deviations" of each step).
-- [ ] Run `check`, `test`, `build` in order; fix warnings.
-- [ ] A short manual test checklist in `docs/manual-tests.md` (plan.md §9 behavioral checks), with what was actually verified ticked.
+- [x] README complete: install, dev, build, test, rebuilding livesplit-core (Podman), browser limitations (Safari 7-day eviction).
+- [ ] ~~`CHANGELOG.md`: deviations from plan.md and why~~: skipped (developer decision); the "Notes / deviations" here have them. Listed in `docs/future-features.md`.
+- [x] Run `check`, `test`, `build` in order; fix warnings.
+- [ ] ~~A short manual test checklist in `docs/manual-tests.md`~~: skipped (developer decision), moved to `docs/future-features.md` (hardening).
 
 **Commit:** `docs: prototype wrap-up`
 
 Notes / deviations:
 
----
-
-## Later (not part of the prototype)
-
-- Milestone 7: design pass (wait for the developer's design).
-- Milestone 8: hardening + manual browser/gamepad matrix (plan.md §9).
-- Optional: `wasm-opt` size pass, Tauri wrapper for global hotkeys.
+- README: getting started commands, `pwa/`, `ticker.ts`/`wakeLock.ts` in the structure, new "Browser limitations" section (Safari eviction, no global hotkeys, gamepad focus, background tabs, install support per browser, https for install/offline/Web Locks, wake lock).
+- The "Later" list moved to the new `docs/future-features.md` (design pass, hardening + manual checks, known limits from steps 11–12, `wasm-opt`, Tauri, CHANGELOG). `CLAUDE.md` points to it.
+- `check` 0/0 (467 files), `test` 259/259, `build` OK without warnings (precache 14 entries, ~1.7 MiB). Nothing to fix.
