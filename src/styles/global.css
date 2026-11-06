@@ -1,3 +1,12 @@
+/* Brand font for the "LiveGrit" name, self-hosted (precached by the service worker). */
+@font-face {
+  font-family: 'Unbounded';
+  src: url('../assets/fonts/Unbounded-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 *,
 *::before,
 *::after {

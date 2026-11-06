@@ -38,11 +38,19 @@
   }
 
   button.primary {
-    border-color: var(--color-text-muted);
+    color: var(--color-bg);
+    background: var(--color-text);
+    border-color: var(--color-text);
   }
 
   button:disabled {
     color: var(--color-text-muted);
     cursor: not-allowed;
+  }
+
+  button.primary:disabled {
+    color: var(--color-text-muted);
+    background: var(--color-border);
+    border-color: var(--color-border);
   }
 </style>

@@ -129,7 +129,10 @@
 
   h1 {
     margin: 0;
+    font-family: var(--font-brand);
     font-size: var(--font-size-lg);
+    /* Only the Regular weight is bundled (no faux bold). */
+    font-weight: 400;
   }
 
   .tabs {

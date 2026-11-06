@@ -18,6 +18,8 @@
   import InputDeviceStatus from '../lib/ui/InputDeviceStatus.svelte';
   import SettingsOpenDialog from '../lib/ui/SettingsOpenDialog.svelte';
   import WindowSizeHint from '../lib/ui/WindowSizeHint.svelte';
+  import SettingsHint from '../lib/ui/SettingsHint.svelte';
+  import GearIcon from '../lib/ui/GearIcon.svelte';
   import { WindowSizeMemory } from '../lib/ui/windowSize.svelte';
   import { openSettings } from '../lib/ui/settingsWindow.svelte';
   import { inputDevices, inputManager } from '../lib/input/appInput';
@@ -50,6 +52,10 @@
   }
 
   const view = $derived(timerStore.view);
+  /** No splits loaded and none saved: points out the gear (`SettingsHint`). */
+  const newUser = $derived(
+    appStorage.restored && timerStore.ready && !view && appStorage.runs.length === 0,
+  );
 </script>
 
 <svelte:window onresize={() => windowSize.resize()} />
@@ -65,13 +71,12 @@
       ? 'Settings (reset or finish the attempt first)'
       : 'Settings'}
   >
-    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M19.14 12.94a7.07 7.07 0 0 0 .06-.94 7.07 7.07 0 0 0-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54a7 7 0 0 0-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0-.06.94c0 .32.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.5.38 1.04.7 1.62.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54a7 7 0 0 0 1.62-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"
-      />
-    </svg>
+    <GearIcon />
   </button>
+
+  {#if newUser}
+    <SettingsHint />
+  {/if}
 
   {#if imports.error}
     <div class="banner" role="alert">
@@ -101,19 +106,29 @@
     {/if}
   {:else}
     <div class="empty">
+      <header class="intro">
+        <h1>LiveGrit</h1>
+        <p>simple, opinionated speedrun split timer<br />built as a PWA</p>
+      </header>
       {#if loadError}
-        <p class="error">Could not start the timer: {loadError}</p>
+        <p class="error">could not start the timer: {loadError}</p>
       {:else if timerStore.ready && appStorage.restored}
-        <p>Import a .lss file or create a new run.</p>
-        <ImportButton onfile={importFile} primary disabled={imports.busy} />
-        <p class="hint">You can also drop a .lss file anywhere on this page.</p>
-        <p class="hint">
+        <div class="dropzone">
+          <p class="dropzone-title">import your existing splits</p>
+          <p class="dropzone-types">provide your .lss file to import splits and times</p>
+          <div class="dropzone-action">
+            <ImportButton onfile={importFile} label="choose file" primary disabled={imports.busy} />
+          </div>
+          <p class="dropzone-hint">or drop it anywhere on this page</p>
+        </div>
+        <p class="hint settings-hint">
+          create new splits or load saved ones in the
           <button type="button" class="link" onclick={() => openSettings('splits')}>
-            Create new splits or load saved ones in the settings.
+            <GearIcon size={14} /><span>settings</span>
           </button>
         </p>
       {:else}
-        <p>Loading…</p>
+        <p>loading…</p>
       {/if}
     </div>
   {/if}
@@ -178,22 +193,89 @@
     text-align: center;
   }
 
-  .empty p {
+  /* Plain `p` (lower specificity than one class), so the classes below can set margins. */
+  p {
     margin: 0;
+  }
+
+  .intro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-bottom: calc(2 * var(--space-4));
+  }
+
+  .intro h1 {
+    margin: 0;
+    font-family: var(--font-brand);
+    font-size: 2.6rem;
+    font-weight: 400;
+    color: var(--color-text);
+    letter-spacing: 0.3rem;
   }
 
   .hint {
     font-size: 0.875em;
   }
 
+  .dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: min(25rem, 100%);
+    min-height: 16.75rem;
+    padding: calc(2 * var(--space-3)) var(--space-4) var(--space-3);
+    color: var(--color-text);
+    background: var(--color-surface-alt);
+    border: 1px dashed var(--color-text-muted);
+    border-radius: var(--radius-2);
+  }
+
+  .dropzone-title {
+    margin-bottom: 0.375rem;
+    font-weight: 600;
+  }
+
+  .dropzone-types {
+    font-size: 0.875em;
+    color: var(--color-text-muted);
+  }
+
+  /* Bottom center of the zone. */
+  /* Takes the free space between the text and the hint; the button sits in its middle. */
+  .dropzone-action {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    padding-block: var(--space-3);
+  }
+
+  /* At the bottom: the zone's bottom padding (`--space-3`) keeps it 1rem above the edge. */
+  .dropzone-hint {
+    font-size: 0.875em;
+    color: var(--color-text-muted);
+  }
+
+  .settings-hint {
+    margin-top: var(--space-4);
+  }
+
+  /* Gear + underlined word, in the text color (the gear uses `currentColor`). */
   .link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25em;
     padding: 0;
     font: inherit;
+    vertical-align: bottom;
     color: var(--color-text);
-    text-decoration: underline;
     background: none;
     border: none;
     cursor: pointer;
+  }
+
+  .link span {
+    text-decoration: underline;
   }
 
   .error {
