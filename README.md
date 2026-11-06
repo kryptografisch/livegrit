@@ -11,7 +11,6 @@ Try [LiveGrit](https://kryptografisch.github.io/livegrit) now.
 
 - **In the browser:** open the page and use it directly, no install needed.
 - **As an app:** install it to your desktop or home screen (PWA). It then runs in its own window and works offline.
-- **OBS browser source:** add the page as a browser source. The source has its own storage, separate from your browser, so import your splits there. It only gets key presses while you use "Interact" on it.
 - **OBS window capture:** run the app or the browser version in its own window and capture that window.
 
 ## Development
