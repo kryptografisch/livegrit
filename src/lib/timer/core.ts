@@ -139,6 +139,157 @@ export function attemptStats(run: RunRef, currentEnded = false): AttemptStats {
   return { attempts: run.attemptCount(), completed };
 }
 
+/** One attempt of the run's history, read out of the core (times in ms). */
+export interface AttemptEntry {
+  /** The attempt's id in the history (shown as "#3"; unique within the run). */
+  index: number;
+  /** When it started / ended (`Date.now()` style); `null` if the file doesn't say. */
+  started: number | null;
+  ended: number | null;
+  /** The final time (the last split) in the timing method; `null` = not finished (reset). */
+  time: number | null;
+  /**
+   * Segment times per segment, in segment order; `null` = no time (skipped, or not reached
+   * before the reset). After a skipped segment, the next time covers both segments.
+   */
+  segments: (number | null)[];
+}
+
+/** An `AtomicDateTime` as `Date.now()` style ms. **Consumes** (disposes) it. */
+function takeDateTime(value: { toRfc3339(): string; [Symbol.dispose](): void } | null) {
+  if (!value) return null;
+  try {
+    const ms = Date.parse(value.toRfc3339());
+    return Number.isNaN(ms) ? null : ms;
+  } finally {
+    value[Symbol.dispose]();
+  }
+}
+
+/**
+ * The attempt history of the run in the core's order (oldest first), with the segment times
+ * of each attempt from the segments' histories. `timingMethod`: the core's `TimingMethod`.
+ * `TimeRef`s share one output slot, so each value is read out right away.
+ */
+export function attemptHistory(run: RunRef, timingMethod: number): AttemptEntry[] {
+  const entries: AttemptEntry[] = [];
+  const byIndex = new Map<number, AttemptEntry>();
+  const segmentCount = run.len();
+  for (let i = 0; i < run.attemptHistoryLen(); i++) {
+    const attempt = run.attemptHistoryIndex(i);
+    const time = attempt.time().index(timingMethod)?.totalSeconds() ?? null;
+    const entry: AttemptEntry = {
+      index: attempt.index(),
+      started: takeDateTime(attempt.started()),
+      ended: takeDateTime(attempt.ended()),
+      time: time === null ? null : Math.round(time * 1000),
+      segments: new Array<number | null>(segmentCount).fill(null),
+    };
+    entries.push(entry);
+    byIndex.set(entry.index, entry);
+  }
+  for (let s = 0; s < segmentCount; s++) {
+    const iter = run.segment(s).segmentHistory().iter();
+    try {
+      for (let element = iter.next(); element; element = iter.next()) {
+        const entry = byIndex.get(element.index());
+        if (!entry) continue; // ids ≤ 0: route change artifacts, not attempts
+        const seconds = element.time().index(timingMethod)?.totalSeconds();
+        if (seconds !== undefined) entry.segments[s] = Math.round(seconds * 1000);
+      }
+    } finally {
+      iter[Symbol.dispose]();
+    }
+  }
+  return entries;
+}
+
+/**
+ * Split times (the run time at the end of each segment) from segment times: the running
+ * sum. A segment without a time has no split time either; the sum carries on past it (the
+ * next segment time covers the skipped one).
+ */
+export function splitTimesOf(segments: readonly (number | null)[]): (number | null)[] {
+  let total = 0;
+  return segments.map((time) => {
+    if (time === null) return null;
+    total += time;
+    return total;
+  });
+}
+
+/** The stored best times of a run in one timing method (ms per segment, `null` = none). */
+export interface BestTimes {
+  /** Personal Best split times. */
+  pb: (number | null)[];
+  /** Best segment times (golds). */
+  golds: (number | null)[];
+}
+
+/** PB split times and golds of the run in `timingMethod` (the core's `TimingMethod`). */
+export function bestTimes(run: RunRef, timingMethod: number): BestTimes {
+  const ms = (seconds: number | undefined) =>
+    seconds === undefined ? null : Math.round(seconds * 1000);
+  const pb: (number | null)[] = [];
+  const golds: (number | null)[] = [];
+  for (let i = 0; i < run.len(); i++) {
+    const segment = run.segment(i);
+    // Shared Time slot: read each value out before the next call.
+    pb.push(ms(segment.personalBestSplitTime().index(timingMethod)?.totalSeconds()));
+    golds.push(ms(segment.bestSegmentTime().index(timingMethod)?.totalSeconds()));
+  }
+  return { pb, golds };
+}
+
+/** One time in a segment's history (`index` ≤ 0: kept from route changes, not a run). */
+export interface SegmentHistoryTime {
+  index: number;
+  ms: number;
+}
+
+/** Every time in segment `segment`'s history in `timingMethod` (entries without one skipped). */
+export function segmentHistoryTimes(
+  run: RunRef,
+  segment: number,
+  timingMethod: number,
+): SegmentHistoryTime[] {
+  const times: SegmentHistoryTime[] = [];
+  const iter = run.segment(segment).segmentHistory().iter();
+  try {
+    for (let element = iter.next(); element; element = iter.next()) {
+      const index = element.index();
+      const seconds = element.time().index(timingMethod)?.totalSeconds();
+      if (seconds !== undefined) times.push({ index, ms: Math.round(seconds * 1000) });
+    }
+  } finally {
+    iter[Symbol.dispose]();
+  }
+  return times;
+}
+
+/** Typed time text ("1:02.45", "62.45") as ms, read by the core's parser; `null` if unreadable. */
+export function parseTimeText(text: string): number | null {
+  const { Language, TimeSpan } = core();
+  const span = TimeSpan.parse(text.trim(), Language.English);
+  if (!span) return null;
+  try {
+    return Math.round(span.totalSeconds() * 1000);
+  } finally {
+    span[Symbol.dispose]();
+  }
+}
+
+/** ms as text the core's time parser reads back exactly ("1:02:03.456"); "" for `null`. */
+export function coreTimeText(ms: number | null): string {
+  if (ms === null) return '';
+  const total = Math.max(0, Math.round(ms));
+  const h = Math.floor(total / 3_600_000);
+  const m = Math.floor(total / 60_000) % 60;
+  const s = Math.floor(total / 1000) % 60;
+  const pad = (n: number, digits = 2) => String(n).padStart(digits, '0');
+  return `${h}:${pad(m)}:${pad(s)}.${pad(total % 1000, 3)}`;
+}
+
 /**
  * Whether the run has any Game Time (there's no flag in the core): a PB split time or a
  * best segment with Game Time. `TimeRef`s share one output slot, so each value is read out

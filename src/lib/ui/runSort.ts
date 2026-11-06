@@ -8,11 +8,13 @@ export interface SortableRun {
   started: number;
   /** The full run time in ms; `null` if it wasn't finished. */
   time: number | null;
+  /** Tie-break for equal `started` (e.g. files without dates): higher = newer. */
+  index?: number;
 }
 
 /** A sorted copy of `runs`. */
 export function sortRuns<T extends SortableRun>(runs: readonly T[], sort: RunSort): T[] {
-  const latest = (a: T, b: T) => b.started - a.started;
+  const latest = (a: T, b: T) => b.started - a.started || (b.index ?? 0) - (a.index ?? 0);
   if (sort === 'latest') return [...runs].sort(latest);
   return [...runs].sort((a, b) => {
     if (a.time === null || b.time === null) {

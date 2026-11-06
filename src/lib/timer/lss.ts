@@ -66,6 +66,36 @@ export async function importSplitsFile(
   }
 }
 
+/**
+ * Removes one attempt from .lss text: its `<Attempt id>` from the attempt history, its
+ * `<Time id>` from every segment history, and one from the attempt count. livesplit-core
+ * has no call for this (only `clearHistory`), so the .lss is edited instead. Meant for the
+ * core's own output (`saveAsLss`), whose layout is fixed. The personal best and the best
+ * segments stay as they are (like in LiveSplit, they aren't derived from the history).
+ * Returns `null` if the attempt isn't in the history.
+ */
+export function removeAttemptFromLss(lss: string, index: number): string | null {
+  if (!Number.isSafeInteger(index)) return null;
+  // Self-closing first (`/>` is matched before a lone `>`), else up to the closing tag.
+  const element = (tag: string) =>
+    new RegExp(`\\s*<${tag} id="${index}"(?=[\\s/>])[^>]*?(?:/>|>[\\s\\S]*?</${tag}>)`, 'g');
+  let found = false;
+  let text = lss.replace(/<AttemptHistory>[\s\S]*?<\/AttemptHistory>/, (block) =>
+    block.replace(element('Attempt'), () => {
+      found = true;
+      return '';
+    }),
+  );
+  if (!found) return null;
+  text = text.replace(/<SegmentHistory>[\s\S]*?<\/SegmentHistory>/g, (block) =>
+    block.replace(element('Time'), ''),
+  );
+  return text.replace(
+    /<AttemptCount>(\d+)<\/AttemptCount>/,
+    (_, count: string) => `<AttemptCount>${Math.max(0, Number(count) - 1)}</AttemptCount>`,
+  );
+}
+
 /** Segment names from a text field: one per line, trimmed, empty lines skipped. */
 export function parseSegmentNames(text: string): string[] {
   return text

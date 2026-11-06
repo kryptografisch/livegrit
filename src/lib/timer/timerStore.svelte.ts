@@ -18,7 +18,9 @@ import type {
 } from 'livesplit-core';
 import { rafTicker, type Ticker } from '../ticker';
 import {
+  attemptHistory,
   attemptStats,
+  bestTimes,
   comparisonNames,
   core,
   createDefaultLayout,
@@ -27,6 +29,8 @@ import {
   parseRun,
   runHasGameTime,
   saveRunAsLss,
+  segmentNames,
+  type AttemptEntry,
   type AttemptStats,
   type WasmSource,
 } from './core';
@@ -80,6 +84,24 @@ export class TimerStore {
    */
   gameName = $state('');
   categoryName = $state('');
+  /** The run's segment names, in order. */
+  segmentNames = $state.raw<string[]>([]);
+  /**
+   * The run's past attempts (oldest first) in the current timing method. Changes with a new
+   * run, a reset and the timing method; a finished attempt only joins it with its reset.
+   */
+  history = $state.raw<AttemptEntry[]>([]);
+  /** The run's golds (best segment times, ms) in the current timing method. */
+  golds = $state.raw<(number | null)[]>([]);
+  /** The run's Personal Best split times (ms) in the current timing method. */
+  pbSplits = $state.raw<(number | null)[]>([]);
+  /** The time the timer starts at (ms; negative = a countdown before 0). */
+  offset = $state(0);
+  /**
+   * Counts up whenever the run changes (loaded, reset, unloaded), e.g. so an edit of a copy
+   * can tell that the run it started from was replaced meanwhile.
+   */
+  runRevision = $state(0);
 
   /**
    * Called after a successful reset, with the timer (its run already contains the attempt).
@@ -196,6 +218,12 @@ export class TimerStore {
     this.hasGameTime = false;
     this.gameName = '';
     this.categoryName = '';
+    this.segmentNames = [];
+    this.history = [];
+    this.golds = [];
+    this.pbSplits = [];
+    this.offset = 0;
+    this.runRevision++;
   }
 
   splitOrStart(): void {
@@ -245,6 +273,7 @@ export class TimerStore {
     const { TimingMethod } = core();
     timer.setCurrentTimingMethod(TimingMethod[method]);
     this.#invalidate();
+    this.#syncHistory();
     this.onSettingsChange?.('timingMethod');
   }
 
@@ -317,6 +346,11 @@ export class TimerStore {
     this.hasGameTime = false;
     this.gameName = '';
     this.categoryName = '';
+    this.segmentNames = [];
+    this.history = [];
+    this.golds = [];
+    this.pbSplits = [];
+    this.offset = 0;
     this.ready = false;
   }
 
@@ -361,6 +395,22 @@ export class TimerStore {
     this.hasGameTime = runHasGameTime(run);
     this.gameName = run.gameName();
     this.categoryName = run.categoryName();
+    this.segmentNames = segmentNames(run);
+    this.offset = Math.round(run.offset().totalSeconds() * 1000);
+    this.#syncHistory();
+    this.runRevision++;
+  }
+
+  /** History and golds in the current timing method. */
+  #syncHistory(): void {
+    const timer = this.#timer;
+    if (!timer) return;
+    const run = timer.getRun();
+    const method = timer.currentTimingMethod();
+    this.history = attemptHistory(run, method);
+    const best = bestTimes(run, method);
+    this.golds = best.golds;
+    this.pbSplits = best.pb;
   }
 
   #requireInit(): void {

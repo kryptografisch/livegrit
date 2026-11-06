@@ -1,18 +1,25 @@
 <script lang="ts">
   // Settings → Splits: saved splits (the loaded ones marked; load, export, delete, + new
-  // splits, import) and the runs of the loaded splits, sorted by Latest or Best (full run
-  // time); a placeholder table with dummy runs for now. The
-  // splits change in the Timer window too; they can't while an attempt runs there
+  // splits, import), then the loaded splits in sub-tabs: Base Info (Edit: game, category,
+  // offset on a copy of the run, `RunDraft`; Reset all times), Golds (read-only), Times (×
+  // removes a run). While Base Info is being edited, nothing else loads, imports, deletes or
+  // removes here, and switching the tab with unsaved changes asks first. The splits change in
+  // the Timer window too; they can't while an attempt runs there
   // (`appStorage.attemptInProgress`).
+  import { onDestroy } from 'svelte';
   import { appStorage } from '../storage/appStorage';
+  import { runDisplayName } from '../storage/db';
+  import type { RunDraft } from '../timer/runDraft.svelte';
   import { timerStore } from '../timer/timerStore.svelte';
+  import AttemptTable from './AttemptTable.svelte';
+  import BaseInfo from './BaseInfo.svelte';
   import DuplicatePrompt from './DuplicatePrompt.svelte';
+  import Golds from './Golds.svelte';
   import ImportButton from './ImportButton.svelte';
   import { ImportFlow } from './importFlow.svelte';
   import NewRunForm from './NewRunForm.svelte';
   import RunList from './RunList.svelte';
-  import { formatClock, formatDate } from './format';
-  import { bestRun, sortRuns, type RunSort } from './runSort';
+  import UnsavedPrompt from './UnsavedPrompt.svelte';
 
   const imports = new ImportFlow(appStorage);
   /** The last create result; import results come from `imports`. */
@@ -30,18 +37,85 @@
     void imports.start(file);
   }
 
-  /** Placeholder runs until the real ones are shown (from the loaded splits' history). */
-  const dummyRuns = [
-    { attempt: 1, started: Date.UTC(2026, 10, 1, 18), time: 1_843_000, text: '30:43.00' },
-    { attempt: 2, started: Date.UTC(2026, 10, 2, 18), time: null, text: '-' },
-    { attempt: 3, started: Date.UTC(2026, 10, 3, 18), time: 1_789_500, text: '29:49.50' },
-    { attempt: 4, started: Date.UTC(2026, 10, 4, 18), time: 1_812_250, text: '30:12.25' },
+  /** The loaded splits' views, one shown at a time. */
+  type Subtab = 'info' | 'golds' | 'times';
+  const subtabs: { id: Subtab; label: string }[] = [
+    { id: 'info', label: 'Base Info' },
+    { id: 'golds', label: 'Golds' },
+    { id: 'times', label: 'Times' },
   ];
+  let subtab = $state<Subtab>('info');
+  /** A tab switch waiting for the unsaved-changes dialog. */
+  let pendingSubtab = $state<Subtab | null>(null);
 
-  let sort = $state<RunSort>('latest');
-  const runs = $derived(sortRuns(dummyRuns, sort));
-  /** Shown in gold, whatever the sort. */
-  const best = $derived(bestRun(dummyRuns));
+  /** Switches the tab; with unsaved changes in the edit, the dialog asks first. */
+  function selectSubtab(id: Subtab) {
+    if (id === subtab) return;
+    if (draft?.changed) pendingSubtab = id;
+    else subtab = id;
+  }
+
+  async function leaveEdit(action: 'save' | 'discard') {
+    const target = pendingSubtab;
+    if (action === 'save') await saveEdit();
+    else cancelEdit();
+    pendingSubtab = null;
+    // Saving can be refused (the edit stays open, with the reason): stay on this tab then.
+    if (target && draft === null) subtab = target;
+  }
+
+  /** The open Base Info edit of the loaded splits. */
+  let draft = $state.raw<RunDraft | null>(null);
+  let saving = $state(false);
+  /** A problem with the edit (starting or saving it). */
+  let editError = $state<string | null>(null);
+  /** The loaded run changed (another window) since the edit started: it can't be saved. */
+  const stale = $derived(draft !== null && draft.revision !== timerStore.runRevision);
+
+  function startEdit() {
+    editError = null;
+    const result = appStorage.startEdit();
+    if (typeof result === 'string') editError = result;
+    else draft = result;
+  }
+
+  function cancelEdit() {
+    draft?.dispose();
+    draft = null;
+    editError = null;
+  }
+
+  async function saveEdit() {
+    const current = draft;
+    if (!current || saving) return;
+    if (!current.changed) {
+      cancelEdit();
+      return;
+    }
+    saving = true;
+    try {
+      const error = await appStorage.saveEdit(current);
+      // The draft is closed once the save got past its checks, also when loading failed.
+      if (!current.open) draft = null;
+      editError = error;
+    } finally {
+      saving = false;
+    }
+  }
+
+  onDestroy(() => draft?.dispose());
+
+  // The splits were unloaded (deleted in another window): nothing left to edit.
+  $effect(() => {
+    if (draft && timerStore.segmentNames.length === 0) cancelEdit();
+  });
+
+  /** The loaded splits, shown above the tabs (a loaded run has ≥ 1 segment). */
+  const loadedName = $derived(
+    timerStore.segmentNames.length > 0
+      ? runDisplayName(timerStore.gameName, timerStore.categoryName)
+      : null,
+  );
 </script>
 
 {#if !ready}
@@ -55,61 +129,82 @@
       The finished attempt is saved. Loading, importing or creating splits resets the timer first.
     </p>
   {/if}
-  <RunList storage={appStorage} />
-  <div class="new" class:creating>
-    <NewRunForm
-      storage={appStorage}
-      bind:open={creating}
-      oncreated={(text) => {
-        imports.dismiss();
-        created = text;
-      }}
-    />
-    {#if !creating}
-      <ImportButton onfile={importFile} disabled={attemptRunning || imports.busy} />
-      <span class="drop-hint">or drag &amp; drop a .lss file onto this page</span>
-    {/if}
-  </div>
+  <RunList storage={appStorage} editing={draft !== null} />
+  {#if draft}
+    <p class="muted">editing the loaded splits: save or cancel in Base Info</p>
+  {:else}
+    <div class="new" class:creating>
+      <NewRunForm
+        storage={appStorage}
+        bind:open={creating}
+        oncreated={(text) => {
+          imports.dismiss();
+          created = text;
+        }}
+      />
+      {#if !creating}
+        <ImportButton onfile={importFile} disabled={attemptRunning || imports.busy} />
+        <span class="drop-hint">or drag &amp; drop a .lss file onto this page</span>
+      {/if}
+    </div>
+  {/if}
   <DuplicatePrompt flow={imports} />
   {#if message && !creating && !imports.pending}
     <p class="muted" class:error={message === imports.error} role="status">{message}</p>
   {/if}
 
-  <h2>Times of the loaded splits</h2>
-  <p class="muted hint">Placeholder: the real times follow later.</p>
-  <div class="sort" role="group" aria-label="Sort runs">
-    Sort
-    <div class="toggle">
-      <button type="button" aria-pressed={sort === 'latest'} onclick={() => (sort = 'latest')}
-        >Latest</button
-      >
-      <button type="button" aria-pressed={sort === 'best'} onclick={() => (sort = 'best')}
-        >Best</button
-      >
-    </div>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th scope="col">Attempt</th>
-          <th scope="col">Date</th>
-          <th scope="col">Time</th>
-          <th scope="col">Run time</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each runs as run (run.attempt)}
-          <tr class:best={run === best}>
-            <th scope="row">#{run.attempt}</th>
-            <td class="date">{formatDate(run.started)}</td>
-            <td class="date">{formatClock(run.started)}</td>
-            <td>{run.text}</td>
-          </tr>
+  {#if loadedName}
+    <h2 class="loaded-name">{loadedName}</h2>
+    <div class="subtabs">
+      <div class="tablist" role="tablist" aria-label={loadedName}>
+        {#each subtabs as t (t.id)}
+          <button
+            type="button"
+            role="tab"
+            id={`splits-tab-${t.id}`}
+            aria-selected={subtab === t.id}
+            aria-controls="splits-panel"
+            class:active={subtab === t.id}
+            onclick={() => selectSubtab(t.id)}>{t.label}</button
+          >
         {/each}
-      </tbody>
-    </table>
-  </div>
+      </div>
+    </div>
+    {#if stale}
+      <p class="muted error" role="status">
+        the splits changed in another window meanwhile: cancel and edit again
+      </p>
+    {/if}
+    {#if editError}<p class="muted error" role="status">{editError}</p>{/if}
+    <div id="splits-panel" role="tabpanel" aria-labelledby={`splits-tab-${subtab}`}>
+      {#if subtab === 'info'}
+        <BaseInfo
+          store={timerStore}
+          storage={appStorage}
+          {draft}
+          {saving}
+          canSave={!stale}
+          onedit={startEdit}
+          onsave={() => void saveEdit()}
+          oncancel={cancelEdit}
+        />
+      {:else if subtab === 'golds'}
+        <Golds store={timerStore} />
+      {:else}
+        <AttemptTable store={timerStore} storage={appStorage} disabled={draft !== null} />
+      {/if}
+    </div>
+    {#if pendingSubtab && draft}
+      <UnsavedPrompt
+        busy={saving}
+        onsave={() => void leaveEdit('save')}
+        ondiscard={() => void leaveEdit('discard')}
+        onstay={() => (pendingSubtab = null)}
+      />
+    {/if}
+  {:else}
+    <p class="muted no-splits">no splits loaded</p>
+  {/if}
 {/if}
 
 <style>
@@ -154,80 +249,42 @@
     margin: 0 0 var(--space-2);
   }
 
-  .sort {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-bottom: var(--space-2);
-    color: var(--color-text-muted);
+  /* Base Info / Golds / Times, like the Settings tabs, under the splits name. */
+  .subtabs {
+    margin: 0 0 var(--space-3);
   }
 
-  .toggle {
+  .tablist {
     display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
   }
 
-  .toggle button {
+  .tablist button {
     padding: var(--space-1) var(--space-3);
     font: inherit;
-    color: var(--color-text);
-    background: var(--color-surface-alt);
-    border: 1px solid var(--color-border);
-    border-radius: 0;
+    color: var(--color-text-muted);
+    background: none;
+    border: none;
+    border-radius: var(--radius-1);
     cursor: pointer;
   }
 
-  .toggle button:first-child {
-    border-radius: var(--radius-1) 0 0 var(--radius-1);
+  .tablist button:hover {
+    color: var(--color-text);
+    background: var(--color-surface-alt);
   }
 
-  .toggle button:last-child {
-    border-left: none;
-    border-radius: 0 var(--radius-1) var(--radius-1) 0;
-  }
-
-  .toggle button[aria-pressed='true'] {
+  .tablist button.active {
+    color: var(--color-text);
     background: var(--color-current-split);
   }
 
-  /* The best run (fastest full run): gold text, like a best segment. */
-  tr.best th,
-  tr.best td {
-    color: var(--color-best-segment);
+  .no-splits {
+    margin-top: var(--space-4);
   }
 
-  td.date {
-    text-align: left;
-  }
-
-  .table-wrap {
-    overflow-x: auto;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-variant-numeric: tabular-nums;
-  }
-
-  th,
-  td {
-    padding: var(--space-1) var(--space-2);
-    text-align: left;
-    border-bottom: 1px solid var(--color-border);
-    white-space: nowrap;
-  }
-
-  thead th {
-    color: var(--color-text-muted);
-    font-weight: normal;
-  }
-
-  tbody th {
-    font-weight: normal;
-  }
-
-  td {
-    text-align: right;
-    color: var(--color-text-muted);
+  .loaded-name {
+    overflow-wrap: anywhere;
   }
 </style>

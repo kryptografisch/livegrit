@@ -52,3 +52,21 @@ export function formatClock(time: number, locale?: string): string {
     hourCycle: 'h23',
   });
 }
+
+/**
+ * A duration in ms as a run time: "7:03.10", "1:02:03.45" (centiseconds, cut off like
+ * LiveSplit, not rounded); "-" for `null`.
+ */
+export function formatDuration(ms: number | null): string {
+  if (ms === null || !Number.isFinite(ms)) return '-';
+  const sign = ms < 0 ? '-' : '';
+  const centis = Math.floor(Math.abs(ms) / 10);
+  const cs = centis % 100;
+  const totalSeconds = Math.floor(centis / 100);
+  const s = totalSeconds % 60;
+  const m = Math.floor(totalSeconds / 60) % 60;
+  const h = Math.floor(totalSeconds / 3600);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const clock = h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+  return `${sign}${clock}.${pad(cs)}`;
+}

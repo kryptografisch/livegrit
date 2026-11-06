@@ -1,13 +1,14 @@
 <script lang="ts">
   // Saved splits: load, export, delete (with an inline confirm), last saved time.
   // The loaded splits are marked; loading others or deleting the loaded ones is refused
-  // during an attempt (the storage layer says so).
+  // during an attempt (the storage layer says so). While an edit is open (`editing`),
+  // loading and deleting are off.
   import { fade } from 'svelte/transition';
   import { downloadText } from '../timer/lss';
   import type { StorageSync } from '../storage/storageSync.svelte';
   import { formatAttempts, formatDateTime } from './format';
 
-  let { storage }: { storage: StorageSync } = $props();
+  let { storage, editing = false }: { storage: StorageSync; editing?: boolean } = $props();
 
   const NOTICE_MS = 4000;
 
@@ -88,8 +89,12 @@
           {:else}
             <button
               type="button"
-              disabled={busy || active || attemptRunning}
-              title={attemptRunning ? 'Reset the current attempt first' : undefined}
+              disabled={busy || active || attemptRunning || editing}
+              title={editing
+                ? 'save or cancel the edit first'
+                : attemptRunning
+                  ? 'Reset the current attempt first'
+                  : undefined}
               onclick={() => open(saved.id)}
             >
               Load
@@ -99,7 +104,7 @@
             </button>
             <button
               type="button"
-              disabled={busy || (active && attemptRunning)}
+              disabled={busy || editing || (active && attemptRunning)}
               onclick={() => (confirmDelete = saved.id)}
             >
               Delete

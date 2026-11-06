@@ -8,6 +8,8 @@ import { padButton, withBinding } from '../src/lib/input/bindings';
 import { InputManager } from '../src/lib/input/inputManager';
 import { SplitterDb } from '../src/lib/storage/db';
 import {
+  EDIT_ATTEMPT_MESSAGE,
+  EDIT_STALE_MESSAGE,
   sameSplits,
   StorageSync,
   type PersistRequester,
@@ -16,7 +18,7 @@ import {
 import { ImportFlow } from '../src/lib/ui/importFlow.svelte';
 import { defaultTimerLayout, type TimerLayout } from '../src/lib/ui/timerLayout';
 import { ManualTicker } from '../src/lib/ticker';
-import { initCore, parseRun, segmentNames } from '../src/lib/timer/core';
+import { core, initCore, parseRun, segmentNames, splitTimesOf } from '../src/lib/timer/core';
 import { ATTEMPT_IN_PROGRESS_MESSAGE } from '../src/lib/timer/lss';
 import { TimerStore } from '../src/lib/timer/timerStore.svelte';
 
@@ -554,6 +556,156 @@ describe('StorageSync', () => {
         attempts: 2,
         completed: 1,
       });
+    });
+
+    it('edits a copy: nothing changes before Save, then loads and saves the edit', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const before = { pb: [...app.store.pbSplits], golds: [...app.store.golds] };
+      const draft = app.sync.startEdit();
+      if (typeof draft === 'string') throw new Error(draft);
+
+      draft.setGame('  Pixel Quest DX ');
+      expect(draft.setOffset('-1.5')).toBe(true);
+      expect(draft.setOffset('nope')).toBe(false);
+      expect(app.store.gameName).toBe('Pixel Quest'); // the timer's run is untouched
+
+      expect(await app.sync.saveEdit(draft)).toBeNull();
+      await settle();
+      expect(draft.open).toBe(false);
+      expect(app.store.gameName).toBe('Pixel Quest DX');
+      expect(app.store.offset).toBe(-1500);
+      expect(app.store.history).toHaveLength(6);
+      expect(app.store.pbSplits).toEqual(before.pb);
+      expect(app.store.golds).toEqual(before.golds);
+      expect(app.sync.runs[0]).toMatchObject({ name: 'Pixel Quest DX - Any%' });
+    });
+
+    it('refuses to save an edit during an attempt or after the run changed', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const draft = app.sync.startEdit();
+      if (typeof draft === 'string') throw new Error(draft);
+      draft.setCategory('100%');
+
+      app.store.splitOrStart();
+      expect(app.sync.startEdit()).toBe(EDIT_ATTEMPT_MESSAGE);
+      expect(await app.sync.saveEdit(draft)).toBe(EDIT_ATTEMPT_MESSAGE);
+      app.store.reset(); // the run has a new attempt now
+      expect(await app.sync.saveEdit(draft)).toBe(EDIT_STALE_MESSAGE);
+      expect(draft.open).toBe(true);
+      expect(app.store.categoryName).toBe('Any%');
+      draft.dispose();
+    });
+
+    it('removes a run and keeps the PB and golds unless asked', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const before = { pb: [...app.store.pbSplits], golds: [...app.store.golds] };
+      expect(await app.sync.removeRun(5, { updatePb: false, updateGolds: false })).toBeNull();
+      await settle();
+      expect(app.store.history.map((a) => a.index)).toEqual([1, 2, 3, 4, 6]);
+      expect(app.store.pbSplits).toEqual(before.pb);
+      expect(app.store.golds).toEqual(before.golds);
+      expect(app.sync.runs[0]).toMatchObject({ attempts: 5 });
+      const saved = await readDb((db) => db.getRun(app.sync.activeRunId!));
+      expect(saved?.lss).not.toContain('<Attempt id="5"');
+    });
+
+    it('moves the golds a removed run holds to the best remaining segment', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const before = { pb: [...app.store.pbSplits], golds: [...app.store.golds] };
+      const { RealTime } = core().TimingMethod;
+      // Run #6 (reset after two splits) has the golds of Forest Gate (60.9 s) and Höhle
+      // (77.8 s). Next best: Forest Gate 61.5 s (#5, also the PB segment), Höhle 78.4 s (#2).
+      expect(app.sync.removalPlan(6, true)).toEqual([
+        {
+          method: RealTime,
+          pb: null, // run #6 isn't the PB
+          golds: [
+            { segment: 0, from: 60_900, to: 61_500 },
+            { segment: 1, from: 77_800, to: 78_400 },
+          ],
+        },
+      ]);
+      expect(await app.sync.removeRun(6, { updatePb: true, updateGolds: true })).toBeNull();
+      await settle();
+      expect(app.store.golds).toEqual([61_500, 78_400, ...before.golds.slice(2)]);
+      expect(app.store.pbSplits).toEqual(before.pb);
+      // The remaining runs keep their times.
+      expect(app.store.history[1]!.segments.slice(0, 2)).toEqual([63_800, 78_400]);
+    });
+
+    it('moves the PB to the next best run when the PB run is removed', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const run3 = app.store.history.find((a) => a.index === 3)!;
+      const [plan] = app.sync.removalPlan(5, true);
+      // #5 (7:03.10) is the PB; the next fastest finished run is #3 (7:03.90).
+      expect(plan?.pb).toEqual({ from: 423_100, to: splitTimesOf(run3.segments), run: 3 });
+      expect(await app.sync.removeRun(5, { updatePb: true, updateGolds: true })).toBeNull();
+      await settle();
+      expect(app.store.pbSplits).toEqual(splitTimesOf(run3.segments));
+      // Golds still never slower than a run's time of that segment.
+      app.store.golds.forEach((gold, s) => {
+        for (const attempt of app.store.history) {
+          const time = attempt.segments[s];
+          if (gold !== null && time !== null && time !== undefined) {
+            expect(gold).toBeLessThanOrEqual(time);
+          }
+        }
+      });
+    });
+
+    it('removing the last run can take the PB and all golds with it', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      for (const index of [1, 2, 3, 4, 5]) {
+        expect(await app.sync.removeRun(index, { updatePb: false, updateGolds: false })).toBeNull();
+      }
+      const [plan] = app.sync.removalPlan(6, true);
+      expect(plan?.pb).toMatchObject({ to: null, run: null });
+      expect(await app.sync.removeRun(6, { updatePb: true, updateGolds: true })).toBeNull();
+      await settle();
+      expect(app.store.history).toEqual([]);
+      expect(app.store.pbSplits.every((t) => t === null)).toBe(true);
+      expect(app.store.golds.every((g) => g === null)).toBe(true);
+    });
+
+    it('recalculates the PB and golds from the recorded runs', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      // Drop the PB run and the golds run without updating anything: a mismatch.
+      expect(await app.sync.removeRun(5, { updatePb: false, updateGolds: false })).toBeNull();
+      expect(await app.sync.removeRun(6, { updatePb: false, updateGolds: false })).toBeNull();
+      const run3 = app.store.history.find((a) => a.index === 3)!;
+      expect(app.sync.recalculationPlan().length).toBeGreaterThan(0);
+
+      expect(await app.sync.recalculateBestTimes()).toBeNull();
+      await settle();
+      expect(app.store.pbSplits).toEqual(splitTimesOf(run3.segments));
+      app.store.golds.forEach((gold, s) => {
+        const times = app.store.history
+          .map((a) => a.segments[s] ?? null)
+          .filter((t): t is number => t !== null);
+        expect(gold).toBe(times.length > 0 ? Math.min(...times) : null);
+      });
+      expect(app.store.history).toHaveLength(4);
+      expect(app.sync.recalculationPlan()).toEqual([]); // nothing left to fix
+    });
+
+    it('resets all times: no runs, PB or golds; comparisons and names stay', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      expect(await app.sync.resetAllTimes()).toBeNull();
+      await settle();
+      expect(app.store.history).toEqual([]);
+      expect(app.store.pbSplits.every((t) => t === null)).toBe(true);
+      expect(app.store.golds.every((g) => g === null)).toBe(true);
+      expect(app.store.comparisons).toContain('Goal');
+      expect(app.store.gameName).toBe('Pixel Quest');
+      expect(app.sync.runs[0]).toMatchObject({ attempts: 0, completed: 0 });
     });
 
     it('fills in the counts of records saved without them, keeping the order', async () => {

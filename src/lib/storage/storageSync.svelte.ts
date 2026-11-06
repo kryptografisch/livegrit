@@ -17,13 +17,36 @@
 
 import { serializeBindings } from '../input/bindings';
 import type { InputManager } from '../input/inputManager';
-import { attemptStats, createRun, EmptyRunError, parseRun, type AttemptStats } from '../timer/core';
+import {
+  attemptHistory,
+  attemptStats,
+  bestTimes,
+  core,
+  createRun,
+  EmptyRunError,
+  parseRun,
+  segmentHistoryTimes,
+  splitTimesOf,
+  type AttemptEntry,
+  type AttemptStats,
+  type BestTimes,
+  type SegmentHistoryTime,
+} from '../timer/core';
+import type { RunRef } from 'livesplit-core';
+import {
+  fastestFinishedRun,
+  goldChanges,
+  recalculatedGolds,
+  type GoldChange,
+} from '../timer/goldOptions';
 import {
   ATTEMPT_IN_PROGRESS_MESSAGE,
   importErrorMessage,
   lssFileName,
   readSplitsFile,
+  removeAttemptFromLss,
 } from '../timer/lss';
+import { RunDraft } from '../timer/runDraft.svelte';
 import type { StoreSetting, TimerStore } from '../timer/timerStore.svelte';
 import { parseTimerLayout, visibleSplitRows, type TimerLayout } from '../ui/timerLayout';
 import { newRunId, runDisplayName, SplitterDb, type RunRecord } from './db';
@@ -100,6 +123,24 @@ export interface LssFile {
   text: string;
   fileName: string;
 }
+
+/** A PB change: the final time now, the new split times (`null` = no PB) and their run. */
+export interface PbChange {
+  from: number | null;
+  to: (number | null)[] | null;
+  run: number | null;
+}
+
+/** What changes in one timing method (the core's `TimingMethod`): PB and/or golds. */
+export interface BestTimesPlan {
+  method: number;
+  pb: PbChange | null;
+  golds: GoldChange[];
+}
+
+export const EDIT_ATTEMPT_MESSAGE = 'reset the current attempt first';
+export const EDIT_STALE_MESSAGE =
+  'the splits changed in another window meanwhile: cancel and edit again';
 
 const browserPersistence: PersistRequester = {
   persisted,
@@ -473,6 +514,183 @@ export class StorageSync {
       this.#link?.notifyChanged();
     }
     await this.refreshRuns();
+    return null;
+  }
+
+  /**
+   * Starts an edit of the loaded splits (Settings → Splits): a `RunDraft` on a copy of the
+   * run, in the current timing method. A finished attempt is reset first (it joins the
+   * history); refused while one runs. Returns the draft or a message for the user.
+   */
+  startEdit(): RunDraft | string {
+    if (!this.#finishAttempt()) return EDIT_ATTEMPT_MESSAGE;
+    const timer = this.#store.timer;
+    if (!timer) return 'no splits are loaded';
+    return new RunDraft(
+      timer.getRun().clone(),
+      timer.currentTimingMethod(),
+      this.#store.runRevision,
+    );
+  }
+
+  /**
+   * What removing run `index` does to the PB and the golds, per timing method (only methods
+   * with a change). `updatePb`: when the run is the PB, the PB becomes the next fastest
+   * finished run (or none); when it is the last run, the PB goes. Golds the run holds go to
+   * the best remaining time (all golds for the last run), capped by the PB after the removal.
+   */
+  removalPlan(index: number, updatePb: boolean): BestTimesPlan[] {
+    const timer = this.#store.timer;
+    if (!timer) return [];
+    const run = timer.getRun();
+    const removed = new Set([index]);
+    return this.#plans(run, (method, best, history, historyTimes) => {
+      const pbTime = best.pb.at(-1) ?? null;
+      const attempt = history.find((a) => a.index === index);
+      const last = history.every((a) => removed.has(a.index));
+      let pb: PbChange | null = null;
+      if (updatePb && pbTime !== null && (last || attempt?.time === pbTime)) {
+        const next = last ? null : fastestFinishedRun(history, removed);
+        pb = {
+          from: pbTime,
+          to: next ? splitTimesOf(next.segments) : null,
+          run: next?.index ?? null,
+        };
+      }
+      const pbAfter = pb ? (pb.to ?? best.pb.map(() => null)) : best.pb;
+      return {
+        method,
+        pb,
+        golds: goldChanges(best.golds, history, historyTimes, pbAfter, removed),
+      };
+    });
+  }
+
+  /**
+   * Removes run `index` from the loaded splits and saves them, with the PB and gold changes
+   * of `removalPlan` as chosen (`updatePb`, `updateGolds`). Refused during an attempt.
+   * Returns `null` on success or a message for the user.
+   */
+  async removeRun(
+    index: number,
+    options: { updatePb: boolean; updateGolds: boolean },
+  ): Promise<string | null> {
+    // Starting the edit may reset a finished attempt first: plan after it.
+    const draft = this.startEdit();
+    if (typeof draft === 'string') return draft;
+    try {
+      for (const plan of this.removalPlan(index, options.updatePb)) {
+        this.#apply(draft, plan, options.updateGolds);
+      }
+      draft.toggleRemoved(index);
+      return await this.saveEdit(draft);
+    } finally {
+      draft.dispose(); // no-op once saved
+    }
+  }
+
+  /**
+   * The PB and golds recalculated from the recorded runs, per timing method (only methods
+   * with a change): the PB becomes the fastest finished run (or none), each gold the
+   * fastest time of the segment among the runs (or none).
+   */
+  recalculationPlan(): BestTimesPlan[] {
+    const timer = this.#store.timer;
+    if (!timer) return [];
+    return this.#plans(timer.getRun(), (method, best, history, historyTimes) => {
+      const next = fastestFinishedRun(history, new Set());
+      const to = next ? splitTimesOf(next.segments) : null;
+      const same = (to ?? best.pb.map(() => null)).every((t, i) => t === (best.pb[i] ?? null));
+      const pb: PbChange | null = same
+        ? null
+        : { from: best.pb.at(-1) ?? null, to, run: next?.index ?? null };
+      const golds = recalculatedGolds(best.golds, historyTimes, to ?? best.pb.map(() => null));
+      return { method, pb, golds };
+    });
+  }
+
+  /** Applies `recalculationPlan` and saves. Returns `null` on success or a message. */
+  async recalculateBestTimes(): Promise<string | null> {
+    const draft = this.startEdit();
+    if (typeof draft === 'string') return draft;
+    try {
+      const plans = this.recalculationPlan();
+      if (plans.length === 0) return null;
+      for (const plan of plans) this.#apply(draft, plan, true);
+      return await this.saveEdit(draft);
+    } finally {
+      draft.dispose();
+    }
+  }
+
+  /** Builds one plan per timing method from the run's data; keeps those with a change. */
+  #plans(
+    run: RunRef,
+    plan: (
+      method: number,
+      best: BestTimes,
+      history: AttemptEntry[],
+      historyTimes: SegmentHistoryTime[][],
+    ) => BestTimesPlan,
+  ): BestTimesPlan[] {
+    const { TimingMethod } = core();
+    const plans: BestTimesPlan[] = [];
+    for (const method of [TimingMethod.RealTime, TimingMethod.GameTime]) {
+      const best = bestTimes(run, method);
+      const historyTimes = best.golds.map((_, s) => segmentHistoryTimes(run, s, method));
+      const result = plan(method, best, attemptHistory(run, method), historyTimes);
+      if (result.pb || result.golds.length > 0) plans.push(result);
+    }
+    return plans;
+  }
+
+  /** Writes a plan into the draft: the PB first (it caps the golds), then the golds. */
+  #apply(draft: RunDraft, plan: BestTimesPlan, golds: boolean): void {
+    if (plan.pb) draft.setPb(plan.method, plan.pb.to);
+    if (golds) draft.applyGolds(plan.method, plan.golds);
+  }
+
+  /**
+   * Resets all times of the loaded splits (runs, PB, golds; the attempt count to 0; names,
+   * offset and custom comparisons stay) and saves them. Returns `null` or a message.
+   */
+  async resetAllTimes(): Promise<string | null> {
+    const draft = this.startEdit();
+    if (typeof draft === 'string') return draft;
+    try {
+      draft.resetTimes();
+      return await this.saveEdit(draft);
+    } finally {
+      draft.dispose();
+    }
+  }
+
+  /**
+   * Saves an edit: closes the draft, removes the marked runs from the .lss, then loads and
+   * saves the result. Refused (the draft stays open) during an
+   * attempt or when the loaded run changed since the edit started. Returns `null` on
+   * success or a message for the user.
+   */
+  async saveEdit(draft: RunDraft): Promise<string | null> {
+    if (!this.#finishAttempt()) return EDIT_ATTEMPT_MESSAGE;
+    if (draft.revision !== this.#store.runRevision) return EDIT_STALE_MESSAGE;
+    const removed = [...draft.removed];
+    const run = draft.close();
+    let text: string;
+    try {
+      text = run.saveAsLss();
+    } finally {
+      run[Symbol.dispose]();
+    }
+    for (const index of removed) text = removeAttemptFromLss(text, index) ?? text;
+    try {
+      this.#store.loadSplits(text);
+    } catch (error) {
+      console.error('[storage] saving the edit failed', error);
+      return 'the changes could not be saved';
+    }
+    this.#applyRunPreferences();
+    await this.saveRun();
     return null;
   }
 
