@@ -1,8 +1,10 @@
 // Remembers the Timer window's size, so it can be sized the same again (e.g. after adding
-// it to OBS with window capture, where the capture should keep its size). On start, the
-// current size is compared with the saved one: if they differ, `hint` is true and the
-// saved size is kept (not overwritten) until the window has that size again or the user
-// accepts the current one (`accept`). Otherwise every resize is saved (debounced).
+// it to OBS with window capture, where the capture should keep its size). Resizing never
+// saves on its own: the saved size only changes when the user accepts the current one
+// (`accept`), or once at the start when none is saved yet. Whenever the window's size
+// differs from the saved one, `hint` is true. When a resize makes them match again, the
+// hint turns `matched` and is removed once the window isn't resized for `settleMs`. A
+// resize away from the saved size shows it again.
 
 import type { WindowSize } from '../storage/settings';
 
@@ -16,9 +18,12 @@ export interface WindowSizeMemoryOptions {
   storage: WindowSizeStorage;
   /** The current size, e.g. `innerWidth` × `innerHeight`. */
   read: () => WindowSize;
-  /** Resizes are saved once they stop for this long. Defaults to 500 ms. */
-  debounceMs?: number;
+  /** After a match, the hint is removed once resizes stop for this long. 2000 ms. */
+  settleMs?: number;
 }
+
+/** `differs`: the sizes differ. `matched`: they match again (removed soon). */
+export type WindowSizeHintState = 'differs' | 'matched';
 
 export function sameSize(a: WindowSize | null, b: WindowSize | null): boolean {
   return a !== null && b !== null && a.width === b.width && a.height === b.height;
@@ -27,68 +32,79 @@ export function sameSize(a: WindowSize | null, b: WindowSize | null): boolean {
 export class WindowSizeMemory {
   /** The window's size now. */
   current = $state.raw<WindowSize>({ width: 0, height: 0 });
-  /** The size the window had last time, shown while it differs (see `hint`). */
+  /** The saved size (`null` before `start` / after `stop`: no hint then). */
   last = $state.raw<WindowSize | null>(null);
-  /** True while resizes are saved (the sizes matched once, or the user accepted). */
-  #tracking = $state(false);
+  /** True while the sizes match again but the hint still shows (see `hintState`). */
+  #matched = $state(false);
 
   readonly #storage: WindowSizeStorage;
   readonly #read: () => WindowSize;
-  readonly #debounceMs: number;
-  #pending: ReturnType<typeof setTimeout> | null = null;
+  readonly #settleMs: number;
+  #matchTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: WindowSizeMemoryOptions) {
     this.#storage = options.storage;
     this.#read = options.read;
-    this.#debounceMs = options.debounceMs ?? 500;
+    this.#settleMs = options.settleMs ?? 2000;
   }
 
-  /** The window's size differs from last time's: show both (until `accept` or a match). */
+  /** The hint shows: the sizes differ, or they just matched again (green). */
   get hint(): boolean {
-    return !this.#tracking && this.last !== null && !sameSize(this.last, this.current);
+    return this.last !== null && (this.#matched || !sameSize(this.last, this.current));
+  }
+
+  /** What the hint shows (only meaningful while `hint`). */
+  get hintState(): WindowSizeHintState {
+    return this.#matched ? 'matched' : 'differs';
   }
 
   /** Compares with the saved size. Call once the settings are restored. */
   start(): void {
     this.current = this.#read();
-    this.last = this.#storage.timerWindowSize;
-    if (this.last === null || sameSize(this.last, this.current)) this.#track();
+    const saved = this.#storage.timerWindowSize;
+    this.last = saved;
+    if (saved === null) this.#save();
   }
 
   /** The window was resized. */
   resize(): void {
-    this.current = this.#read();
-    if (!this.#tracking && sameSize(this.last, this.current)) this.#tracking = true;
-    if (this.#tracking) this.#saveSoon();
+    const wasShown = this.hint;
+    const next = this.#read();
+    if (!sameSize(next, this.current)) this.current = next;
+    if (this.last === null) return;
+    this.#clearMatchTimer();
+    if (!sameSize(this.last, this.current)) {
+      this.#matched = false;
+    } else if (wasShown) {
+      // Just matched (or still matching): green, removed once resizes stop.
+      this.#matched = true;
+      this.#matchTimer = setTimeout(() => {
+        this.#matchTimer = null;
+        this.#matched = false;
+      }, this.#settleMs);
+    }
   }
 
-  /** The current size becomes the one to keep (the hint's ×). */
+  /** The current size becomes the one to keep (the hint's "save this size"). */
   accept(): void {
-    this.#track();
-  }
-
-  /** Stops saving (a pending save is dropped). */
-  stop(): void {
-    if (this.#pending !== null) clearTimeout(this.#pending);
-    this.#pending = null;
-    this.#tracking = false;
-    this.last = null;
-  }
-
-  #track(): void {
-    this.#tracking = true;
     this.#save();
   }
 
-  #saveSoon(): void {
-    if (this.#pending !== null) clearTimeout(this.#pending);
-    this.#pending = setTimeout(() => {
-      this.#pending = null;
-      this.#save();
-    }, this.#debounceMs);
+  /** Hides the hint (nothing is saved until `start` again). */
+  stop(): void {
+    this.#clearMatchTimer();
+    this.#matched = false;
+    this.last = null;
+  }
+
+  #clearMatchTimer(): void {
+    if (this.#matchTimer !== null) clearTimeout(this.#matchTimer);
+    this.#matchTimer = null;
   }
 
   #save(): void {
+    this.#clearMatchTimer();
+    this.#matched = false;
     const size = this.current;
     this.last = size;
     this.#storage.saveTimerWindowSize(size);

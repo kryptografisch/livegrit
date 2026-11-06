@@ -3,7 +3,7 @@
   // footer, the optional on-screen buttons, the last used device). The gear (top right)
   // opens the Settings window; while one is open a modal says so and timer input is off.
   // At the bottom: the window size hint (`WindowSizeMemory`).
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { timerStore } from '../lib/timer/timerStore.svelte';
   import { appStorage } from '../lib/storage/appStorage';
   import RunHeader from '../lib/ui/RunHeader.svelte';
@@ -38,9 +38,10 @@
   });
 
   // Compared once the saved size is restored; nothing is saved while another page shows.
+  // Untracked: `start` reads and writes state (that must not re-run this effect).
   $effect(() => {
     if (!appStorage.restored) return;
-    windowSize.start();
+    untrack(() => windowSize.start());
     return () => windowSize.stop();
   });
 

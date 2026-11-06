@@ -17,7 +17,12 @@ const storage = {
 };
 
 function memory() {
-  return new WindowSizeMemory({ storage, read: () => size, debounceMs: 100 });
+  return new WindowSizeMemory({ storage, read: () => size, settleMs: 2000 });
+}
+
+function resizeTo(m: WindowSizeMemory, width: number, height: number) {
+  size = { width, height };
+  m.resize();
 }
 
 beforeEach(() => {
@@ -30,55 +35,69 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('WindowSizeMemory', () => {
-  it('saves the first size and later resizes (debounced), without a hint', () => {
+  it('saves the first size only when none is saved yet', () => {
     const m = memory();
     m.start();
     expect(m.hint).toBe(false);
     expect(saves).toEqual([{ width: 400, height: 600 }]);
-
-    size = { width: 410, height: 600 };
-    m.resize();
-    size = { width: 420, height: 600 };
-    m.resize();
-    expect(saves).toHaveLength(1);
-    vi.advanceTimersByTime(100);
-    expect(saves).toEqual([
-      { width: 400, height: 600 },
-      { width: 420, height: 600 },
-    ]);
-    expect(m.hint).toBe(false);
   });
 
-  it('shows both sizes when they differ and keeps the saved one meanwhile', () => {
-    saved = { width: 300, height: 500 };
+  it('never saves on resize; shows the hint whenever the size differs', () => {
+    saved = { width: 400, height: 600 };
     const m = memory();
     m.start();
+    expect(m.hint).toBe(false);
+
+    resizeTo(m, 420, 600);
+    vi.advanceTimersByTime(10_000);
     expect(m.hint).toBe(true);
-    expect(m.current).toEqual({ width: 400, height: 600 });
-    expect(m.last).toEqual({ width: 300, height: 500 });
-
-    size = { width: 350, height: 550 };
-    m.resize();
-    vi.advanceTimersByTime(1000);
+    expect(m.hintState).toBe('differs');
+    expect(m.current).toEqual({ width: 420, height: 600 });
+    expect(m.last).toEqual({ width: 400, height: 600 });
     expect(saves).toEqual([]);
-    expect(saved).toEqual({ width: 300, height: 500 });
   });
 
-  it('hides the hint once the window has the saved size again, then tracks', () => {
+  it('turns matched, then hides once the window settles', () => {
     saved = { width: 300, height: 500 };
     const m = memory();
     m.start();
-    size = { width: 300, height: 500 };
-    m.resize();
+    expect(m.hintState).toBe('differs');
+
+    resizeTo(m, 300, 500);
+    expect(m.hint).toBe(true);
+    expect(m.hintState).toBe('matched');
+    vi.advanceTimersByTime(1999);
+    expect(m.hintState).toBe('matched');
+    vi.advanceTimersByTime(1);
     expect(m.hint).toBe(false);
-    size = { width: 320, height: 500 };
-    m.resize();
-    expect(m.hint).toBe(false);
-    vi.advanceTimersByTime(100);
-    expect(saved).toEqual({ width: 320, height: 500 });
+    expect(saves).toEqual([]);
   });
 
-  it('keeps the current size when the hint is closed', () => {
+  it('goes back to differs when resized away before it is gone', () => {
+    saved = { width: 300, height: 500 };
+    const m = memory();
+    m.start();
+    resizeTo(m, 300, 500);
+    vi.advanceTimersByTime(1500);
+    expect(m.hintState).toBe('matched');
+    resizeTo(m, 310, 500);
+    expect(m.hintState).toBe('differs');
+    vi.advanceTimersByTime(10_000);
+    expect(m.hint).toBe(true);
+  });
+
+  it('restarts the settle wait on every resize while matched', () => {
+    saved = { width: 300, height: 500 };
+    const m = memory();
+    m.start();
+    resizeTo(m, 300, 500);
+    vi.advanceTimersByTime(1500);
+    resizeTo(m, 300, 500);
+    vi.advanceTimersByTime(1500);
+    expect(m.hintState).toBe('matched');
+  });
+
+  it('keeps the current size on accept', () => {
     saved = { width: 300, height: 500 };
     const m = memory();
     m.start();
@@ -87,13 +106,14 @@ describe('WindowSizeMemory', () => {
     expect(saved).toEqual({ width: 400, height: 600 });
   });
 
-  it('saves nothing after stop', () => {
+  it('shows no hint after stop', () => {
+    saved = { width: 300, height: 500 };
     const m = memory();
     m.start();
-    size = { width: 500, height: 600 };
-    m.resize();
     m.stop();
-    vi.advanceTimersByTime(1000);
-    expect(saves).toHaveLength(1);
+    expect(m.hint).toBe(false);
+    resizeTo(m, 320, 500);
+    expect(m.hint).toBe(false);
+    expect(saves).toEqual([]);
   });
 });
