@@ -3,66 +3,24 @@
 A browser-only, installable (PWA) speedrun split timer that looks and behaves similar to LiveSplit.
 It's built with Svelte 5, TypeScript and Vite, and uses [livesplit-core](https://github.com/LiveSplit/livesplit-core), compiled to WebAssembly, for all timing and split logic.
 
-Status: prototype. See [docs/future-features.md](docs/future-features.md) for what's next.
+![home](docs/images/home.png)
+![main timer view](docs/images/main.png)
+![settings: splits](docs/images/settings-splits.png)
+![settings: timer](docs/images/settings-timer.png)
+![settings: controls](docs/images/settings-controls.png)
 
-## Prerequisites
+Try [LiveGrit](https://kryptografisch.github.io/livegrit) now.
 
-- Node.js 24+ and npm
-- Podman, only if you want to rebuild livesplit-core (the built WASM is committed in `vendor/`)
+## Usage
 
-## Getting started
+- **In the browser:** open the page and use it directly, no install needed.
+- **As an app:** install it to your desktop or home screen (PWA). It then runs in its own window and works offline.
+- **OBS browser source:** add the page as a browser source. The source has its own storage, separate from your browser, so import your splits there. It only gets key presses while you use "Interact" on it.
+- **OBS window capture:** run the app or the browser version in its own window and capture that window.
 
-```sh
-npm install
-npm run dev        # dev server with hot reload
-npm run build      # production build into dist/
-npm run preview    # serve dist/ (the service worker and offline mode only work here, not in dev)
-```
+## Development
 
-Before committing: `npm run format`, `npm run check`, `npm run test`.
-
-## Scripts
-
-| Command                | What it does                                      |
-| ---------------------- | ------------------------------------------------- |
-| `npm install`          | Install dependencies                              |
-| `npm run dev`          | Start the dev server                              |
-| `npm run build`        | Production build into `dist/`                     |
-| `npm run preview`      | Serve the production build locally                |
-| `npm run check`        | Type-check TypeScript and Svelte (`svelte-check`) |
-| `npm run test`         | Run unit tests once (Vitest)                      |
-| `npm run test:watch`   | Run unit tests in watch mode                      |
-| `npm run format`       | Format all files with Prettier                    |
-| `npm run format:check` | Check formatting without changing files           |
-
-## Project structure
-
-```
-src/
-  main.ts, App.svelte      app entry + shell with hash router (#/ and #/settings)
-  lib/
-    routes.ts, router.svelte.ts  hash routes + router state
-    sync/                  coordination between the app's windows (Timer + Settings)
-    timer/                 livesplit-core wrapper, reactive timer store, .lss helpers
-    input/                 actions, input manager, keyboard + gamepad sources, bindings
-    storage/               IndexedDB + persistent storage
-    pwa/                   service worker update prompt, install prompt + help
-    ticker.ts, wakeLock.ts shared frame loop, screen wake lock during an attempt
-    ui/                    small presentational components
-  pages/                   TimerPage, SettingsPage (opens in its own window)
-  styles/                  tokens.css (all design tokens), global.css
-tests/                     Vitest tests; fixtures/ holds our own generated .lss files
-vendor/                    built livesplit-core package (WASM + JS bindings)
-scripts/                   build scripts (livesplit-core via Podman)
-docs/                      reference docs
-```
-
-## Rebuilding livesplit-core
-
-The built core (WASM + JS/TS bindings) is committed in `vendor/livesplit-core/`, so you don't need Rust.
-To rebuild it (newer livesplit-core, other features), run `scripts/build-livesplit-core.sh`. It needs only Podman.
-The pinned commit, toolchain versions and features are listed in `vendor/livesplit-core/BUILD-INFO.md`.
-See [docs/build-livesplit-core.md](docs/build-livesplit-core.md) for details.
+See [docs/development.md](docs/development.md).
 
 ## Browser limitations
 
@@ -73,10 +31,9 @@ See [docs/build-livesplit-core.md](docs/build-livesplit-core.md) for details.
 - **Several windows:** the app can only reliably tell whether a Settings window is open when Web Locks are available, which needs a secure context (https or `localhost`).
 - **Screen wake lock:** the screen stays awake during an attempt only in browsers that support the Screen Wake Lock API.
 
-## Styling
+## Roadmap
 
-All colors, fonts, sizes and spacing are CSS custom properties in `src/styles/tokens.css`.
-Components don't hard-code colors, so a new design can be applied by changing the tokens.
+See [docs/future-features.md](docs/future-features.md) for what's next.
 
 ## License
 

@@ -1,7 +1,3 @@
-# reference repos
-/livesplit*/
-/LiveSplit*/
-
 # generated / third-party
 node_modules/
 dist/
@@ -12,6 +8,5 @@ package-lock.json
 # data and downloaded docs (keep byte-exact)
 tests/fixtures/
 docs/llms-*.txt
-docs/vite-plugin-pwa/
 
 tmp/
