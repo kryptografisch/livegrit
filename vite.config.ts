@@ -26,6 +26,8 @@ function themeColorHtml(): Plugin {
 }
 
 export default defineConfig({
+  // Served from https://kryptografisch.github.io/livegrit/ (GitHub Pages project site).
+  base: '/livegrit/',
   plugins: [
     svelte(),
     themeColorHtml(),
