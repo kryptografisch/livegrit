@@ -1,6 +1,7 @@
 <script lang="ts">
-  // The install bar at the top of the Timer page. Gone for good once "+ Install" was
-  // clicked (saved in the settings); Settings → Data keeps its own install button.
+  // The install bar at the top of the Timer page. Gone for good once "+ Install" was used
+  // (browser dialog answered or instructions closed; saved in the settings); Settings →
+  // Data keeps its own install button.
   import { router } from '../router.svelte';
   import { timerStore } from '../timer/timerStore.svelte';
   import { appStorage } from '../storage/appStorage';
@@ -22,7 +23,7 @@
 {#if shown}
   <div class="install-bar">
     <span>Install as PWA to your desktop/homescreen</span>
-    <InstallButton onclick={() => appStorage.dismissInstallBar()} />
+    <InstallButton ondone={() => appStorage.dismissInstallBar()} />
   </div>
 {/if}
 

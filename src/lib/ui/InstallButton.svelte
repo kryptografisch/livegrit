@@ -1,21 +1,28 @@
 <script lang="ts">
   // "+ Install": the browser's install dialog where there is one (Chromium), otherwise a
-  // modal with instructions for this browser. `onclick` runs first (e.g. hide the bar).
+  // modal with instructions for this browser. `ondone` runs once that is over (the browser
+  // dialog answered or the instructions closed), e.g. to hide the bar. Not before: hiding
+  // the bar unmounts this button and with it the instructions modal.
   import { pwaInstall } from '../pwa/appPwa';
   import InstallHelpDialog from './InstallHelpDialog.svelte';
 
-  let { onclick }: { onclick?: () => void } = $props();
+  let { ondone }: { ondone?: () => void } = $props();
 
   let helpOpen = $state(false);
 
   async function install() {
-    onclick?.();
-    if (!(await pwaInstall.install())) helpOpen = true;
+    if (await pwaInstall.install()) ondone?.();
+    else helpOpen = true;
+  }
+
+  function setHelpOpen(value: boolean) {
+    helpOpen = value;
+    if (!value) ondone?.();
   }
 </script>
 
 <button type="button" class="install" onclick={install}>+ Install</button>
-<InstallHelpDialog bind:open={helpOpen} />
+<InstallHelpDialog bind:open={() => helpOpen, setHelpOpen} />
 
 <style>
   .install {
