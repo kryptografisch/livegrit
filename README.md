@@ -1,11 +1,12 @@
 # LiveGrit
 
 A browser-only, installable (PWA) speedrun split timer that looks and behaves similar to LiveSplit.
+
 It's built with Svelte 5, TypeScript and Vite, and uses [livesplit-core](https://github.com/LiveSplit/livesplit-core), compiled to WebAssembly, for all timing and split logic.
 
-![LiveGrit screenshots: home, main timer view, and the settings pages for splits, timer and controls](docs/images/overview.png)
+> Try [LiveGrit](https://kryptografisch.github.io/livegrit) now.
 
-Try [LiveGrit](https://kryptografisch.github.io/livegrit) now.
+![LiveGrit screenshots: home, main timer view, and the settings pages for splits, timer and controls](docs/images/overview.png)
 
 ## Usage
 
