@@ -8,6 +8,7 @@
 import type { RawInput } from './bindings';
 import type { PadEvent, PadListener, PadSnapshot } from './gamepadSource';
 import type { InputListener } from './inputManager';
+import { padFamily, type PadFamily } from './padLayout';
 
 export interface PadInfo {
   /** `Gamepad.index` (slot). */
@@ -15,6 +16,8 @@ export interface PadInfo {
   id: string;
   /** Readable name from the id. */
   name: string;
+  /** Which button names it uses (Xbox or PlayStation). */
+  family: PadFamily;
 }
 
 export type UsedDevice = { kind: 'keyboard' } | ({ kind: 'pad' } & PadInfo);
@@ -53,6 +56,15 @@ export class InputDeviceStore {
   /** The device whose input last triggered an action (keyboard until a pad is used). */
   lastUsed = $state<UsedDevice>(KEYBOARD);
 
+  /**
+   * Button names for device-independent lists (the bindings table): the last used pad's,
+   * else the first connected pad's, else Xbox.
+   */
+  get labelFamily(): PadFamily {
+    if (this.lastUsed.kind === 'pad') return this.lastUsed.family;
+    return this.pads[0]?.family ?? 'xbox';
+  }
+
   /** Follows a pad source's connects/disconnects. Returns the unsubscribe function. */
   attachPads(source: PadEventSource): () => void {
     for (const { index, id } of source.pads) this.#connected(index, id);
@@ -83,7 +95,7 @@ export class InputDeviceStore {
       return;
     }
     const pad = this.pads.find((p) => p.index === input.padIndex && p.id === input.padId);
-    const info = pad ?? { index: input.padIndex, id: input.padId, name: padName(input.padId) };
+    const info = pad ?? padInfo(input.padIndex, input.padId);
     const last = this.lastUsed;
     if (last.kind === 'pad' && last.index === info.index && last.id === info.id) return;
     this.lastUsed = { kind: 'pad', ...info };
@@ -91,6 +103,10 @@ export class InputDeviceStore {
 
   #connected(index: number, id: string): void {
     const others = this.pads.filter((p) => p.index !== index);
-    this.pads = [...others, { index, id, name: padName(id) }].sort((a, b) => a.index - b.index);
+    this.pads = [...others, padInfo(index, id)].sort((a, b) => a.index - b.index);
   }
+}
+
+function padInfo(index: number, id: string): PadInfo {
+  return { index, id, name: padName(id), family: padFamily(id) };
 }

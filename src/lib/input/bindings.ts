@@ -1,11 +1,21 @@
 // Binding model, defaults and (versioned) serialization.
 //
 // Every Action has a list of bindings (several keys and/or pad buttons). Keys are stored by
-// `KeyboardEvent.code` (layout-independent). Pad buttons store the raw button index plus a
-// human-readable label. Which pad they apply to is not part of the binding: only the one
-// pad selected as input device is used (see `inputDevice.svelte.ts`).
+// `KeyboardEvent.code` (layout-independent). Pad bindings store raw button indices only;
+// their names depend on the pad they're shown for (`padLayout.ts`). Which pad they apply to
+// is not part of the binding: every pad works (see `inputDevice.svelte.ts`).
+//
+// Pad bindings come in three kinds (on a controller shared with the game, a combo is often
+// the only binding the game doesn't trigger by accident):
+// - single:   press one button.
+// - hold:     hold one button, then press a second one (e.g. hold Select, press A).
+// - together: press two buttons at (nearly) the same time, in any order: the second press
+//             within `CHORD_WINDOW_MS` of the first fires the action.
 
+import { padButtonLabel, type PadFamily } from './padLayout';
 import { ACTIONS, type Action } from './types';
+
+export { padButtonLabel, type PadFamily } from './padLayout';
 
 export interface KeyBinding {
   kind: 'key';
@@ -13,12 +23,26 @@ export interface KeyBinding {
   code: string;
 }
 
-export interface PadBinding {
-  kind: 'pad';
-  buttonIndex: number;
-  /** Shown in the UI, e.g. "A" or "Button 17". */
-  label: string;
-}
+export type PadBinding =
+  | {
+      kind: 'pad';
+      combo: 'single';
+      buttonIndex: number;
+    }
+  | {
+      kind: 'pad';
+      combo: 'hold';
+      /** Held first… */
+      hold: number;
+      /** …then this one is pressed (≠ `hold`). */
+      buttonIndex: number;
+    }
+  | {
+      kind: 'pad';
+      combo: 'together';
+      /** Two different buttons, ascending. */
+      buttons: [number, number];
+    };
 
 export type Binding = KeyBinding | PadBinding;
 
@@ -27,40 +51,100 @@ export type Bindings = Record<Action, Binding[]>;
 /** Raw input from a source, matched against the bindings. */
 export type RawInput =
   | { kind: 'key'; code: string }
-  | { kind: 'pad'; buttonIndex: number; padId: string; padIndex: number };
+  | {
+      kind: 'pad';
+      buttonIndex: number;
+      padId: string;
+      padIndex: number;
+      /** The other buttons held on that pad at the moment of the press. */
+      held?: readonly number[];
+      /** The held buttons that went down within `CHORD_WINDOW_MS` before this press. */
+      together?: readonly number[];
+    };
+
+/**
+ * Two pad buttons going down within this many ms count as pressed together. Also the
+ * line between "together" and "hold + press" when recording a combo.
+ */
+export const CHORD_WINDOW_MS = 100;
 
 export const BINDINGS_VERSION = 1;
 
 const key = (code: string): KeyBinding => ({ kind: 'key', code });
 
-/**
- * Button names of the W3C "standard" gamepad mapping (Xbox name / PlayStation name), which
- * browsers use for most common pads. Other pads have other layouts: the raw index is what
- * counts, the name is only a hint.
- */
-const STANDARD_BUTTONS = [
-  'A / Cross',
-  'B / Circle',
-  'X / Square',
-  'Y / Triangle',
-  'LB / L1',
-  'RB / R1',
-  'LT / L2',
-  'RT / R2',
-  'Back / Select',
-  'Start',
-  'Left stick',
-  'Right stick',
-  'D-pad up',
-  'D-pad down',
-  'D-pad left',
-  'D-pad right',
-  'Home',
-];
+/** A single pad button. */
+export function padButton(buttonIndex: number): PadBinding {
+  return { kind: 'pad', combo: 'single', buttonIndex };
+}
 
-/** A readable name for a pad button index (standard mapping, else "Button N"). */
-export function padButtonLabel(buttonIndex: number): string {
-  return STANDARD_BUTTONS[buttonIndex] ?? `Button ${buttonIndex}`;
+/** Hold `hold`, then press `buttonIndex` (the same button twice gives a single button). */
+export function padHold(hold: number, buttonIndex: number): PadBinding {
+  if (hold === buttonIndex) return padButton(buttonIndex);
+  return { kind: 'pad', combo: 'hold', hold, buttonIndex };
+}
+
+/** Two buttons pressed together (order doesn't matter; the same button twice = single). */
+export function padTogether(a: number, b: number): PadBinding {
+  if (a === b) return padButton(a);
+  return { kind: 'pad', combo: 'together', buttons: a < b ? [a, b] : [b, a] };
+}
+
+/** One button of a pad binding for display: what to do with it, and its name. */
+export interface PadLabelPart {
+  tag: 'press' | 'hold';
+  button: string;
+}
+
+/**
+ * A pad binding as tagged parts with the button names of `family`, shown as
+ * "[hold] RB + [press] A": single → one press; hold → hold + press; together → two presses.
+ */
+export function padLabelParts(binding: PadBinding, family: PadFamily = 'xbox'): PadLabelPart[] {
+  const part = (tag: PadLabelPart['tag'], i: number): PadLabelPart => ({
+    tag,
+    button: padButtonLabel(i, family),
+  });
+  switch (binding.combo) {
+    case 'single':
+      return [part('press', binding.buttonIndex)];
+    case 'hold':
+      return [part('hold', binding.hold), part('press', binding.buttonIndex)];
+    case 'together':
+      return [part('press', binding.buttons[0]), part('press', binding.buttons[1])];
+  }
+}
+
+/** A pad binding as plain text, e.g. "A", "Hold RB + A", "LB + RB together". */
+export function padBindingText(binding: PadBinding, family: PadFamily = 'xbox'): string {
+  const name = (i: number) => padButtonLabel(i, family);
+  switch (binding.combo) {
+    case 'single':
+      return name(binding.buttonIndex);
+    case 'hold':
+      return `Hold ${name(binding.hold)} + ${name(binding.buttonIndex)}`;
+    case 'together':
+      return `${name(binding.buttons[0])} + ${name(binding.buttons[1])} together`;
+  }
+}
+
+/**
+ * Keys that can't be bound: Escape cancels the capture, and Ctrl/Alt/Meta are left to the
+ * browser (the keyboard source ignores every key pressed with them).
+ */
+const UNBINDABLE_KEYS = new Set([
+  'Escape',
+  'ControlLeft',
+  'ControlRight',
+  'AltLeft',
+  'AltRight',
+  'MetaLeft',
+  'MetaRight',
+  'OSLeft',
+  'OSRight',
+]);
+
+export function isBindableKey(code: string): boolean {
+  return code !== '' && !UNBINDABLE_KEYS.has(code);
 }
 
 /**
@@ -84,17 +168,67 @@ export function defaultBindings(): Bindings {
 
 export function cloneBindings(bindings: Bindings): Bindings {
   const out = {} as Bindings;
-  for (const action of ACTIONS) out[action] = bindings[action].map((b) => ({ ...b }));
+  for (const action of ACTIONS) out[action] = bindings[action].map(cloneBinding);
   return out;
 }
 
-/** Stable identity of a binding (ignores the label). */
+function cloneBinding(binding: Binding): Binding {
+  if (binding.kind === 'pad' && binding.combo === 'together') {
+    return { ...binding, buttons: [binding.buttons[0], binding.buttons[1]] };
+  }
+  return { ...binding };
+}
+
+/**
+ * Stable identity of a binding (button indices only), e.g. "key:Space", "pad:0",
+ * "pad:8>0" (hold 8, press 0), "pad:0&8" (0 and 8 together).
+ */
 export function bindingId(binding: Binding): string {
-  return binding.kind === 'key' ? `key:${binding.code}` : `pad:${binding.buttonIndex}`;
+  if (binding.kind === 'key') return `key:${binding.code}`;
+  switch (binding.combo) {
+    case 'single':
+      return `pad:${binding.buttonIndex}`;
+    case 'hold':
+      return `pad:${binding.hold}>${binding.buttonIndex}`;
+    case 'together':
+      return `pad:${binding.buttons[0]}&${binding.buttons[1]}`;
+  }
 }
 
 export function sameBinding(a: Binding, b: Binding): boolean {
   return bindingId(a) === bindingId(b);
+}
+
+/**
+ * `binding` added to `action`. The same binding on another action is removed there (one
+ * input, one action); those actions are returned in `movedFrom`. Already bound to `action`:
+ * unchanged. Doesn't modify `bindings`.
+ */
+export function withBinding(
+  bindings: Bindings,
+  action: Action,
+  binding: Binding,
+): { bindings: Bindings; movedFrom: Action[] } {
+  const out = cloneBindings(bindings);
+  const id = bindingId(binding);
+  const movedFrom: Action[] = [];
+  for (const other of ACTIONS) {
+    if (other === action) continue;
+    const kept = out[other].filter((b) => bindingId(b) !== id);
+    if (kept.length !== out[other].length) {
+      out[other] = kept;
+      movedFrom.push(other);
+    }
+  }
+  if (!out[action].some((b) => bindingId(b) === id)) out[action].push(cloneBinding(binding));
+  return { bindings: out, movedFrom };
+}
+
+/** `bindings` without the binding with id `id` on `action`. Doesn't modify `bindings`. */
+export function withoutBinding(bindings: Bindings, action: Action, id: string): Bindings {
+  const out = cloneBindings(bindings);
+  out[action] = out[action].filter((b) => bindingId(b) !== id);
+  return out;
 }
 
 /** Display names of the actions. */
@@ -117,22 +251,58 @@ export function keyLabel(code: string): string {
   return code.replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
-/** A readable name for any binding. */
-export function bindingLabel(binding: Binding): string {
-  return binding.kind === 'key' ? keyLabel(binding.code) : binding.label;
+/** A readable name for any binding (pad buttons named for `family`). */
+export function bindingLabel(binding: Binding, family: PadFamily = 'xbox'): string {
+  return binding.kind === 'key' ? keyLabel(binding.code) : padBindingText(binding, family);
+}
+
+/** How specific a match is: together and hold need two buttons, single one. */
+const SPECIFICITY = { single: 0, hold: 1, together: 2 } as const;
+
+/** Whether pad binding `b` matches the press `input`. */
+function padMatches(b: PadBinding, input: Extract<RawInput, { kind: 'pad' }>): boolean {
+  const pressed = input.buttonIndex;
+  switch (b.combo) {
+    case 'single':
+      return b.buttonIndex === pressed;
+    case 'hold':
+      return b.buttonIndex === pressed && (input.held ?? []).includes(b.hold);
+    case 'together': {
+      const [x, y] = b.buttons;
+      const other = x === pressed ? y : y === pressed ? x : null;
+      return other !== null && (input.together ?? []).includes(other);
+    }
+  }
 }
 
 /**
- * The action bound to `input`, or `null`. If two actions share a binding, the first in
- * `ACTIONS` order wins. Pad buttons match by button index only; whether the pad is the
- * selected one is the input manager's job.
+ * The action bound to `input`, or `null`. Pad bindings match on any pad; other held
+ * buttons don't matter (players hold buttons all the time). The most specific match wins:
+ * together > hold + press > single (so hold Select + A beats plain A). Together beats hold
+ * because a quick double press also has the first button held. On a tie the first action
+ * in `ACTIONS` order wins.
  */
 export function actionFor(bindings: Bindings, input: RawInput): Action | null {
-  const matches = (b: Binding) =>
-    input.kind === 'key'
-      ? b.kind === 'key' && b.code === input.code
-      : b.kind === 'pad' && b.buttonIndex === input.buttonIndex;
-  return ACTIONS.find((action) => bindings[action].some(matches)) ?? null;
+  if (input.kind === 'key') {
+    return (
+      ACTIONS.find((action) =>
+        bindings[action].some((b) => b.kind === 'key' && b.code === input.code),
+      ) ?? null
+    );
+  }
+  let best: Action | null = null;
+  let bestScore = -1;
+  for (const action of ACTIONS) {
+    for (const b of bindings[action]) {
+      if (b.kind !== 'pad' || !padMatches(b, input)) continue;
+      const score = SPECIFICITY[b.combo];
+      if (score > bestScore) {
+        best = action;
+        bestScore = score;
+      }
+    }
+  }
+  return best;
 }
 
 interface StoredBindings {
@@ -186,18 +356,27 @@ function parseBinding(entry: unknown): Binding | null {
   if (entry.kind === 'key') {
     return typeof entry.code === 'string' && entry.code !== '' ? key(entry.code) : null;
   }
-  if (entry.kind === 'pad') {
-    const { buttonIndex, label } = entry;
-    if (typeof buttonIndex !== 'number' || !Number.isInteger(buttonIndex) || buttonIndex < 0) {
-      return null;
-    }
-    return {
-      kind: 'pad',
-      buttonIndex,
-      label: typeof label === 'string' && label !== '' ? label : padButtonLabel(buttonIndex),
-    };
+  if (entry.kind !== 'pad') return null;
+  // A stored label (older data) is ignored: names depend on the pad they are shown for.
+  const { combo, buttonIndex, hold, buttons } = entry;
+  if (combo === 'single' || combo === undefined) {
+    return isButtonIndex(buttonIndex) ? padButton(buttonIndex) : null;
+  }
+  if (combo === 'hold') {
+    if (!isButtonIndex(buttonIndex) || !isButtonIndex(hold) || hold === buttonIndex) return null;
+    return padHold(hold, buttonIndex);
+  }
+  if (combo === 'together') {
+    if (!Array.isArray(buttons) || buttons.length !== 2) return null;
+    const [a, b] = buttons as unknown[];
+    if (!isButtonIndex(a) || !isButtonIndex(b) || a === b) return null;
+    return padTogether(a, b);
   }
   return null;
+}
+
+function isButtonIndex(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

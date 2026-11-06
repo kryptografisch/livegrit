@@ -15,6 +15,7 @@
 // drops out and comes back within the debounce window doesn't fire a phantom press.
 
 import { rafTicker, type Ticker } from '../ticker';
+import { CHORD_WINDOW_MS } from './bindings';
 import type { InputManager, InputSource } from './inputManager';
 
 /** One pad as read from `navigator.getGamepads()`. */
@@ -30,7 +31,16 @@ export interface PadSnapshot {
 export type PadEvent =
   | { type: 'connected'; index: number; id: string }
   | { type: 'disconnected'; index: number; id: string }
-  | { type: 'press'; index: number; id: string; buttonIndex: number };
+  | {
+      type: 'press';
+      index: number;
+      id: string;
+      buttonIndex: number;
+      /** The other buttons pressed in the same snapshot, ascending (for hold combos). */
+      held: number[];
+      /** The `held` buttons that went down within the chord window (for "together"). */
+      together: number[];
+    };
 
 /** A second press of the same button within this many ms is ignored. */
 export const PAD_DEBOUNCE_MS = 50;
@@ -38,18 +48,22 @@ export const PAD_DEBOUNCE_MS = 50;
 interface PadState {
   id: string;
   buttons: boolean[];
+  /** When each button last went down (ms). */
+  downAt: number[];
 }
 
 /** Pure edge detection over successive gamepad snapshots. */
 export class GamepadTracker {
   readonly #debounceMs: number;
+  readonly #chordWindowMs: number;
   /** By `Gamepad.index`. */
   readonly #pads = new Map<number, PadState>();
   /** Last accepted press per pad + button (kept across disconnects). */
   readonly #lastPress = new Map<string, number>();
 
-  constructor(debounceMs = PAD_DEBOUNCE_MS) {
+  constructor(debounceMs = PAD_DEBOUNCE_MS, chordWindowMs = CHORD_WINDOW_MS) {
     this.#debounceMs = debounceMs;
+    this.#chordWindowMs = chordWindowMs;
   }
 
   /** The pads of the last snapshot, by index. */
@@ -79,16 +93,30 @@ export class GamepadTracker {
     for (const snap of current.values()) {
       let pad = this.#pads.get(snap.index);
       if (!pad) {
-        pad = { id: snap.id, buttons: [] };
+        pad = { id: snap.id, buttons: [], downAt: [] };
         this.#pads.set(snap.index, pad);
         events.push({ type: 'connected', index: snap.index, id: snap.id });
       }
-      snap.buttons.forEach((pressed, buttonIndex) => {
-        const was = pad.buttons[buttonIndex] ?? false;
-        if (pressed && !was && this.#acceptPress(snap, buttonIndex, now)) {
-          events.push({ type: 'press', index: snap.index, id: snap.id, buttonIndex });
-        }
-      });
+      const down = pressedButtons(snap.buttons);
+      const rising = down.filter((i) => !(pad.buttons[i] ?? false));
+      // First all edge times of this frame, so buttons pressed in the same frame see each
+      // other as "together".
+      for (const i of rising) pad.downAt[i] = now;
+      for (const buttonIndex of rising) {
+        if (!this.#acceptPress(snap, buttonIndex, now)) continue;
+        const held = down.filter((i) => i !== buttonIndex);
+        const together = held.filter(
+          (i) => now - (pad.downAt[i] ?? -Infinity) <= this.#chordWindowMs,
+        );
+        events.push({
+          type: 'press',
+          index: snap.index,
+          id: snap.id,
+          buttonIndex,
+          held,
+          together,
+        });
+      }
       pad.buttons = [...snap.buttons];
     }
 
@@ -116,6 +144,15 @@ export class GamepadTracker {
       if (now - time >= this.#debounceMs) this.#lastPress.delete(key);
     }
   }
+}
+
+/** The indices of the pressed buttons, ascending. */
+export function pressedButtons(buttons: readonly boolean[]): number[] {
+  const out: number[] = [];
+  buttons.forEach((pressed, i) => {
+    if (pressed) out.push(i);
+  });
+  return out;
 }
 
 /** Reads the connected pads; never throws (no API, or blocked by a permissions policy). */
@@ -209,6 +246,8 @@ export class GamepadSource implements InputSource {
         buttonIndex: event.buttonIndex,
         padId: event.id,
         padIndex: event.index,
+        held: event.held,
+        together: event.together,
       });
       if (action) this.#manager.dispatch(action, 'gamepad');
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { defaultBindings } from '../src/lib/input/bindings';
+import { defaultBindings, padHold, padTogether } from '../src/lib/input/bindings';
 import {
   GamepadSource,
   GamepadTracker,
@@ -25,7 +25,7 @@ describe('GamepadTracker', () => {
     const t = new GamepadTracker(50);
     expect(t.update([pad()], 0)).toEqual([{ type: 'connected', index: 0, id: ID }]);
     expect(t.update([pad([1])], 100)).toEqual([
-      { type: 'press', index: 0, id: ID, buttonIndex: 1 },
+      { type: 'press', index: 0, id: ID, buttonIndex: 1, held: [], together: [] },
     ]);
     // Held: no new press.
     expect(t.update([pad([1])], 200)).toEqual([]);
@@ -33,6 +33,28 @@ describe('GamepadTracker', () => {
     // Released, then pressed again.
     expect(t.update([pad()], 400)).toEqual([]);
     expect(presses(t.update([pad([1])], 500))).toEqual([[0, 1]]);
+  });
+
+  it('reports the other held buttons, and which of them are "together"', () => {
+    const t = new GamepadTracker(50, 100);
+    t.update([pad()], 0);
+    t.update([pad([3])], 100);
+    // 3 went down 300 ms ago: held, not together.
+    expect(t.update([pad([0, 3])], 400)).toEqual([
+      { type: 'press', index: 0, id: ID, buttonIndex: 0, held: [3], together: [] },
+    ]);
+    t.update([pad()], 500);
+    t.update([pad([2])], 600);
+    // Within the window (inclusive).
+    expect(t.update([pad([1, 2])], 700)).toEqual([
+      { type: 'press', index: 0, id: ID, buttonIndex: 1, held: [2], together: [2] },
+    ]);
+    // Same frame: each sees the other.
+    t.update([pad()], 800);
+    expect(t.update([pad([1, 2])], 900)).toEqual([
+      { type: 'press', index: 0, id: ID, buttonIndex: 1, held: [2], together: [2] },
+      { type: 'press', index: 0, id: ID, buttonIndex: 2, held: [1], together: [1] },
+    ]);
   });
 
   it('tracks buttons and pads independently', () => {
@@ -52,7 +74,7 @@ describe('GamepadTracker', () => {
     expect(t.update([], 0)).toEqual([]);
     expect(t.update([pad([0])], 16)).toEqual([
       { type: 'connected', index: 0, id: ID },
-      { type: 'press', index: 0, id: ID, buttonIndex: 0 },
+      { type: 'press', index: 0, id: ID, buttonIndex: 0, held: [], together: [] },
     ]);
   });
 
@@ -102,7 +124,7 @@ describe('GamepadTracker', () => {
     expect(t.update([pad([0], 0, 'New pad')], 100)).toEqual([
       { type: 'disconnected', index: 0, id: ID },
       { type: 'connected', index: 0, id: 'New pad' },
-      { type: 'press', index: 0, id: 'New pad', buttonIndex: 0 },
+      { type: 'press', index: 0, id: 'New pad', buttonIndex: 0, held: [], together: [] },
     ]);
   });
 
@@ -156,8 +178,8 @@ describe('GamepadSource', () => {
     const manager = new InputManager(target, { now: () => now });
     // No pad defaults: button 0 splits, button 1 undoes.
     const bindings = defaultBindings();
-    bindings.split.push({ kind: 'pad', buttonIndex: 0, label: 'A' });
-    bindings.undo.push({ kind: 'pad', buttonIndex: 1, label: 'B' });
+    bindings.split.push({ kind: 'pad', combo: 'single', buttonIndex: 0 });
+    bindings.undo.push({ kind: 'pad', combo: 'single', buttonIndex: 1 });
     manager.bindings = bindings;
     const ticker = new ManualTicker();
     const win = new EventTarget();
@@ -206,6 +228,39 @@ describe('GamepadSource', () => {
     expect(target.splitOrStart).toHaveBeenCalledTimes(1);
     frame([pad([], 0, 'Other pad'), pad([1], 1)]);
     expect(target.undo).toHaveBeenCalledTimes(1);
+  });
+
+  it('dispatches hold + press over the plain button', () => {
+    const { target, manager, frame } = setup();
+    const b = manager.bindings;
+    b.reset.push(padHold(3, 0));
+    manager.bindings = b;
+    frame([pad()]);
+    frame([pad([3])]); // hold button alone: nothing
+    frame([pad([0, 3])], 300);
+    expect(target.reset).toHaveBeenCalledTimes(1);
+    expect(target.splitOrStart).not.toHaveBeenCalled();
+    frame([pad([3])]);
+    frame([pad()]);
+    frame([pad([0])]);
+    expect(target.splitOrStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('dispatches two buttons pressed together, on the second press', () => {
+    const { target, manager, frame } = setup();
+    const b = manager.bindings;
+    b.pause.push(padTogether(2, 3));
+    manager.bindings = b;
+    frame([pad()]);
+    frame([pad([3])]);
+    expect(target.togglePause).not.toHaveBeenCalled();
+    frame([pad([2, 3])], 30);
+    expect(target.togglePause).toHaveBeenCalledTimes(1);
+    // Too far apart: no chord.
+    frame([pad()]);
+    frame([pad([2])]);
+    frame([pad([2, 3])], 300);
+    expect(target.togglePause).toHaveBeenCalledTimes(1);
   });
 
   it('keeps tracking but fires nothing while the manager is disabled', () => {

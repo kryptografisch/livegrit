@@ -27,7 +27,7 @@ function setup() {
   };
   const manager = new InputManager(target, { now: () => now });
   const bindings = defaultBindings();
-  bindings.split.push({ kind: 'pad', buttonIndex: 0, label: 'A' });
+  bindings.split.push({ kind: 'pad', combo: 'single', buttonIndex: 0 });
   manager.bindings = bindings;
   const ticker = new ManualTicker();
   const source = new GamepadSource({
@@ -77,8 +77,8 @@ describe('InputDeviceStore', () => {
     const { devices, frame } = setup();
     frame([pad(1, PS), pad(0, XBOX)]);
     expect(devices.pads).toEqual([
-      { index: 0, id: XBOX, name: 'Xbox Wireless Controller' },
-      { index: 1, id: PS, name: 'Wireless Controller' },
+      { index: 0, id: XBOX, name: 'Xbox Wireless Controller', family: 'xbox' },
+      { index: 1, id: PS, name: 'Wireless Controller', family: 'playstation' },
     ]);
     frame([pad(1, PS)]);
     expect(devices.pads.map((p) => p.index)).toEqual([1]);
@@ -96,6 +96,7 @@ describe('InputDeviceStore', () => {
       index: 0,
       id: XBOX,
       name: 'Xbox Wireless Controller',
+      family: 'xbox',
     });
 
     // Any pad and the keyboard work.
@@ -105,6 +106,18 @@ describe('InputDeviceStore', () => {
     key('Space');
     expect(target.splitOrStart).toHaveBeenCalledTimes(3);
     expect(devices.lastUsed).toEqual({ kind: 'keyboard' });
+  });
+
+  it('names buttons for the last used pad, else the first connected, else Xbox', () => {
+    const { devices, frame, key } = setup();
+    expect(devices.labelFamily).toBe('xbox');
+    frame([pad(0, PS)]);
+    expect(devices.labelFamily).toBe('playstation');
+    frame([pad(0, PS), pad(1, XBOX, [0])]);
+    expect(devices.labelFamily).toBe('xbox');
+    // Back to the keyboard: the first connected pad (PlayStation) again.
+    key('Space');
+    expect(devices.labelFamily).toBe('playstation');
   });
 
   it('ignores unbound input', () => {
@@ -125,6 +138,8 @@ describe('InputDeviceStore', () => {
   it('picks up pads the source already knows when attached', () => {
     const devices = new InputDeviceStore();
     devices.attachPads({ pads: [pad(2, PS)], subscribe: () => () => {} });
-    expect(devices.pads).toEqual([{ index: 2, id: PS, name: 'Wireless Controller' }]);
+    expect(devices.pads).toEqual([
+      { index: 2, id: PS, name: 'Wireless Controller', family: 'playstation' },
+    ]);
   });
 });

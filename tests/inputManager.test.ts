@@ -89,7 +89,7 @@ describe('input manager', () => {
   it('reports resolved input to onInput listeners (only bound input, only while enabled)', () => {
     const { manager } = setup();
     const bindings = defaultBindings();
-    bindings.split.push({ kind: 'pad', buttonIndex: 0, label: 'A' });
+    bindings.split.push({ kind: 'pad', combo: 'single', buttonIndex: 0 });
     manager.bindings = bindings;
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const seen = vi.fn();
