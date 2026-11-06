@@ -43,6 +43,9 @@ export type TimingMethodName = 'RealTime' | 'GameTime';
 
 export const DEFAULT_VISIBLE_ROWS = 10;
 
+/** Settings that `TimerStore.onSettingsChange` reports. */
+export type StoreSetting = 'comparison' | 'timingMethod' | 'visibleRows';
+
 export interface TimerStoreOptions {
   /** Defaults to the shared rAF ticker. Tests pass a `ManualTicker`. */
   ticker?: Ticker;
@@ -64,9 +67,18 @@ export class TimerStore {
 
   /**
    * Called after a successful reset, with the timer (its run already contains the attempt).
-   * Step 9 saves the run here. No-op for now.
+   * The storage layer saves the run here.
    */
   onReset: ((timer: TimerRef) => void) | null = null;
+
+  /** Called when an attempt finishes (the last split), e.g. to save the run. */
+  onAttemptEnded: ((timer: TimerRef) => void) | null = null;
+
+  /**
+   * Called when the user changes a setting through the store (comparison, timing method,
+   * visible rows), e.g. to save it. Not called by `loadRun`.
+   */
+  onSettingsChange: ((setting: StoreSetting) => void) | null = null;
 
   #visibleRows = $state(DEFAULT_VISIBLE_ROWS);
   #ticker: Ticker | undefined;
@@ -121,6 +133,7 @@ export class TimerStore {
       this.#layout = createDefaultLayout({ visibleRows: next });
       this.#invalidate();
     }
+    this.onSettingsChange?.('visibleRows');
   }
 
   /** Replaces the current run. **Consumes `run`.** Throws if it has no segments. */
@@ -146,7 +159,11 @@ export class TimerStore {
   }
 
   splitOrStart(): void {
+    const before = this.phase;
     this.#command((t) => t.splitOrStart());
+    if (before !== 'Ended' && this.phase === 'Ended' && this.#timer) {
+      this.onAttemptEnded?.(this.#timer);
+    }
   }
 
   undo(): void {
@@ -172,7 +189,9 @@ export class TimerStore {
 
   /** Switches the comparison; returns false if the run doesn't have it. */
   setComparison(name: string): boolean {
-    return this.#command((t) => t.setCurrentComparison(name));
+    const ok = this.#command((t) => t.setCurrentComparison(name));
+    if (ok) this.onSettingsChange?.('comparison');
+    return ok;
   }
 
   /**
@@ -186,17 +205,20 @@ export class TimerStore {
     const { TimingMethod } = core();
     timer.setCurrentTimingMethod(TimingMethod[method]);
     this.#invalidate();
+    this.onSettingsChange?.('timingMethod');
   }
 
   /**
    * The run as .lss text plus a file name (`Game - Category.lss`), or `null` without a run.
    * Includes the attempt history and, like LiveSplit, the state of a running attempt.
    */
-  exportLss(): { text: string; fileName: string } | null {
+  exportLss(): { text: string; fileName: string; game: string; category: string } | null {
     const timer = this.#timer;
     if (!timer) return null;
     const run = timer.getRun();
-    return { text: saveRunAsLss(timer), fileName: lssFileName(run.gameName(), run.categoryName()) };
+    const game = run.gameName();
+    const category = run.categoryName();
+    return { text: saveRunAsLss(timer), fileName: lssFileName(game, category), game, category };
   }
 
   /** Scrolls the split window (only has an effect when not all rows are visible). */

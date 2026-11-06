@@ -51,6 +51,7 @@ export class InputManager {
   readonly #lastFired = new Map<Action, number>();
   readonly #disconnects = new Map<InputSource, () => void>();
   readonly #inputListeners = new Set<InputListener>();
+  readonly #bindingsListeners = new Set<(bindings: Bindings) => void>();
 
   constructor(target: ActionTarget, options: InputManagerOptions = {}) {
     this.#target = target;
@@ -65,6 +66,22 @@ export class InputManager {
 
   set bindings(bindings: Bindings) {
     this.#bindings = cloneBindings(bindings);
+    for (const listener of this.#bindingsListeners) {
+      try {
+        listener(this.bindings);
+      } catch (error) {
+        console.error('[input] bindings listener failed', error);
+      }
+    }
+  }
+
+  /**
+   * Listens to binding changes (e.g. to save them, or to show restored ones). Gets a copy.
+   * Returns the unsubscribe function.
+   */
+  onBindingsChange(listener: (bindings: Bindings) => void): () => void {
+    this.#bindingsListeners.add(listener);
+    return () => this.#bindingsListeners.delete(listener);
   }
 
   /** Starts a source (once). */

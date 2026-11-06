@@ -29,6 +29,7 @@ When a step is done, tick its checkboxes, fill in "Notes / deviations" under tha
 | Input devices          | No device selection: the keyboard and **every** gamepad work, and bindings are independent of the device (pad bindings are button indices only). The Controls page lists the available devices (Keyboard + detected pads) with the hint "Press a button on your controller to detect it". The Timer page footer shows the device last used for an action ("Keyboard" by default, the pad's name after a pad press). |
 | Gamepad defaults       | **No gamepad default bindings** (keyboard defaults only). The game also receives every pad press and games use most buttons, so any default could trigger the timer by accident: a wrong default is worse than none. The user binds pad buttons (and combos, step 8) on the Controls page. No extra hint in the UI.                                                                                                 |
 | Binding rules          | One input = one action: binding an input that another action has moves it (the UI says so). Pad bindings: single button, hold one + press a second, or two pressed together (within 100 ms); max two buttons; auto-detected when recording (saved at the second press, a single button at its release); together > hold > single when several match. Escape and Ctrl/Alt/Meta can't be bound.                       |
+| Storage                | The run's `.lss` is saved on reset, on attempt finish and on import (as a new run). Comparison, timing method, rows, bindings and the buttons toggle are settings (saved on change; the current comparison isn't part of the `.lss`). Persistent storage is requested automatically only once ever (first gesture); step 10 adds a manual button.                                                                   |
 | Focus                  | No "only works while focused" warning anywhere: input also works while the browser window is visible and another app has the focus (tested by the developer). plan.md's limitation note is removed.                                                                                                                                                                                                                 |
 
 ---
@@ -259,15 +260,28 @@ Notes / deviations:
 
 ## Step 9: Storage (IndexedDB + persistence)
 
-- [ ] `storage/db.ts` with `idb`: DB `splitter`, v1 stores `runs` (`{id, name, game, category, lss, updatedAt}`) and `settings` (single record), and a migration switch in `upgrade()`.
-- [ ] `persist.ts`: `persist()`, `persisted()`, `estimate()`; request persistence on the first user gesture.
-- [ ] Save the run's `.lss` on reset and on attempt finish, and after comparison changes. Never per frame.
-- [ ] Persist settings: bindings, comparison, timing method, visible rows, last active run id. Auto-restore the last run + settings on reload.
-- [ ] Vitest with `fake-indexeddb` (ask before adding the dependency) for the db layer.
+- [x] `storage/db.ts` with `idb`: DB `splitter`, v1 stores `runs` (`{id, name, game, category, lss, updatedAt}`) and `settings` (single record), and a migration switch in `upgrade()`.
+- [x] `persist.ts`: `persist()`, `persisted()`, `estimate()`; request persistence on the first user gesture.
+- [x] Save the run's `.lss` on reset and on attempt finish, and after comparison changes. Never per frame.
+- [x] Persist settings: bindings, comparison, timing method, visible rows, last active run id. Auto-restore the last run + settings on reload.
+- [x] Vitest with `fake-indexeddb` (ask before adding the dependency) for the db layer.
 
 **Commit:** `feat(storage): indexeddb runs/settings, persistence, auto-restore`
 
 Notes / deviations:
+
+- Done, except the manual browser checks (reload restores the run/settings, persistence prompt in Firefox, the DevTools IndexedDB view): for the developer.
+- `fake-indexeddb` 6.2.7 added as a dev dependency (developer approved). `npm audit` reports 2 low findings, both pre-existing (`@sveltejs/vite-plugin-svelte` → `deepmerge`, no fix available).
+- `storage/db.ts`: `SplitterDb.open({name?, onVersionChange?})` (rejects without IndexedDB), `getRun`, `listRuns` (newest first, via an `updatedAt` index), `putRun`, `deleteRun`, `getSettings` (parsed, defaults if missing), `putSettings`, `close`. `upgrade()` has `switch (oldVersion)` with `case 0` (v1); next schema = bump `DB_VERSION`, add `case 1`. `blocking` closes the connection (another tab upgrades) and the app says "reload to keep saving". Helpers: `newRunId()` (`crypto.randomUUID` only exists in secure contexts, so a `getRandomValues` fallback for the LAN dev server over http), `runDisplayName(game, category)` ("Game - Category" / "Untitled run").
+- `storage/settings.ts` (new): `Settings` = bindings, comparison (`null` = the run's default), timing method, visible rows, **`showButtons`** (`null` = device default; added, the on-screen buttons toggle should survive a reload too), last run id, **`persistRequested`**. Stored with a `version`; `parseSettings` never throws and checks each field on its own (one bad field doesn't reset the others).
+- `storage/persist.ts`: `persisted()`, `persist()`, `estimate()` → `null` where `navigator.storage` is missing (insecure contexts) or fails; `onFirstUserGesture(request)` (first `pointerdown`/`keydown`, capture phase). **Asked once ever** (`persistRequested`), and not at all if already persisted: Firefox shows a prompt, and asking on every start could pop it up on the key that starts a run. Step 10's "Request persistent storage" button asks again.
+- `storage/storageSync.svelte.ts` (new, `StorageSync`) does the wiring; `storage/appStorage.ts` is the app-wide instance (timer store, input manager, `timerUi`). `start()` (from `App.svelte`, on every start page): core init → open db → settings → bindings, visible rows, buttons toggle → last run (`loadSplits(record.lss)`) → stored comparison/timing method → then it starts saving. Reactive `restored` (Timer page shows "Loading…" until then, no flash of the empty state), `error` (banner on the Timer page with dismiss), `activeRunId` (for step 10).
+- Saving: the run on **reset** (`onReset`) and on **attempt finish** (new `TimerStore.onAttemptEnded`, fired when a split goes to `Ended`; the core saves an ended attempt as if reset, so it is already in the history then). Imports go through `appStorage.importFile` and are saved as a **new** run record that becomes the active/last run (step 10 builds the list on that). `exportLss()` now also returns `game`/`category`. The text is taken synchronously at the hook, so the record matches that moment.
+- **Deviation "after comparison changes"**: the current comparison isn't part of the `.lss`, so a comparison change saves the **settings**, not the run. Store setting changes are reported by the new `TimerStore.onSettingsChange('comparison' | 'timingMethod' | 'visibleRows')` (only from user calls, not `loadRun`); bindings by the new `InputManager.onBindingsChange` (the bindings table also uses it, so bindings restored after the Controls page opened show up there); the buttons toggle via `appStorage.setShowButtons`.
+- Preferences across runs: the stored comparison is applied to every run that has it; Game Time only to runs with Game Time (others show Real Time, the stored preference stays Game Time). While applying them, store changes aren't saved back.
+- Failure handling: no IndexedDB / open fails → timer works in memory, banner "Saving is not available in this browser"; a stored run that can't be parsed → banner, empty state, import works; a missing last run → `lastRunId` cleared silently. Write failures → banner suggesting an .lss export.
+- Not done (spec: never per frame): no save while an attempt is running (e.g. on `pagehide`): IndexedDB writes there aren't reliable; closing the tab mid-attempt loses that attempt, like before.
+- Tests: `tests/storage.test.ts` (schema, runs CRUD/order, settings round-trip and parsing, version-change close, helpers), `tests/storageSync.test.ts` (real wasm + fake-indexeddb: import → restore on a new "page load", save on finish/reset but not per split, bindings/rows/buttons restore, comparison/timing preferences, missing/broken last run, no database, persistence asked once / not when granted). `check` 0/0, `test` 136/136, `build` OK.
 
 ---
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { timerStore } from '../lib/timer/timerStore.svelte';
-  import { importSplitsFile } from '../lib/timer/lss';
+  import { appStorage } from '../lib/storage/appStorage';
   import RunHeader from '../lib/ui/RunHeader.svelte';
   import SplitList from '../lib/ui/SplitList.svelte';
   import BigTimer from '../lib/ui/BigTimer.svelte';
@@ -26,7 +26,7 @@
   });
 
   async function importFile(file: File) {
-    importError = await importSplitsFile(timerStore, file);
+    importError = await appStorage.importFile(file);
   }
 
   const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes('Files') ?? false;
@@ -75,6 +75,12 @@
       <button type="button" onclick={() => (importError = null)} aria-label="Dismiss">×</button>
     </div>
   {/if}
+  {#if appStorage.error}
+    <div class="banner" role="alert">
+      <span>{appStorage.error}</span>
+      <button type="button" onclick={() => appStorage.clearError()} aria-label="Dismiss">×</button>
+    </div>
+  {/if}
 
   {#if view}
     {#if view.title}
@@ -99,7 +105,7 @@
     <div class="empty">
       {#if loadError}
         <p class="error">Could not start the timer: {loadError}</p>
-      {:else if timerStore.ready}
+      {:else if timerStore.ready && appStorage.restored}
         <p>Import a .lss file or create a new run.</p>
         <ImportButton onfile={importFile} primary />
         <p class="hint">You can also drop a .lss file anywhere on this page.</p>

@@ -5,6 +5,13 @@
   import { timerStore } from './lib/timer/timerStore.svelte';
   import { wakeLock } from './lib/wakeLock';
   import { gamepadSource, inputManager, keyboardSource } from './lib/input/appInput';
+  import { appStorage } from './lib/storage/appStorage';
+
+  // Restore the settings and the last run (on every start page), then keep them saved.
+  // A core load error is shown by the Timer page.
+  $effect(() => {
+    appStorage.start().catch(() => {});
+  });
 
   // Timer keys only act on the Timer page; the Controls page captures input for bindings.
   $effect(() => {

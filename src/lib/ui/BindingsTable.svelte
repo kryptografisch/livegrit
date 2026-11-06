@@ -30,9 +30,10 @@
 
   type Kind = Binding['kind'];
 
-  // In memory only for now (step 9 persists them). The manager holds the live copy; this
-  // component is the only editor, so reading it once on mount is enough.
+  // The manager holds the live copy (saved by the storage layer). Follows its changes, so
+  // bindings restored from storage after this page was opened show up too.
   let bindings = $state.raw<Bindings>(untrack(() => manager.bindings));
+  $effect(() => manager.onBindingsChange((next) => (bindings = next)));
   let capture = $state<{ action: Action; kind: Kind } | null>(null);
   /** Pad combo being recorded (for display). */
   let pending = $state<string | null>(null);
@@ -42,8 +43,7 @@
   let swallowKeyUp: string | null = null;
 
   function apply(next: Bindings) {
-    bindings = next;
-    manager.bindings = next;
+    manager.bindings = next; // updates `bindings` via onBindingsChange
   }
 
   function startCapture(action: Action, kind: Kind) {

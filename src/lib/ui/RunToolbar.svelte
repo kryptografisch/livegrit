@@ -6,6 +6,7 @@
   import { downloadText } from '../timer/lss';
   import ImportButton from './ImportButton.svelte';
   import { timerUi } from './timerUi.svelte';
+  import { appStorage } from '../storage/appStorage';
 
   let { store, onimport }: { store: TimerStore; onimport: (file: File) => void } = $props();
 
@@ -41,7 +42,7 @@
     type="button"
     class="buttons-toggle"
     aria-pressed={timerUi.showButtons}
-    onclick={() => (timerUi.showButtons = !timerUi.showButtons)}
+    onclick={() => appStorage.setShowButtons(!timerUi.showButtons)}
     title="Show or hide the on-screen timer buttons"
   >
     {timerUi.showButtons ? 'Hide buttons' : 'Show buttons'}
