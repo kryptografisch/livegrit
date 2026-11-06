@@ -241,9 +241,10 @@ describe('StorageSync', () => {
     expect(app.store.visibleRows).toBe(0);
     app.sync.setTimerLayout({ compactSplits: true });
     expect(app.store.visibleRows).toBe(6);
-    app.sync.setTimerLayout({ splitRows: 500, timerScale: 10 });
+    app.sync.setTimerLayout({ splitRows: 500, timerScale: 10, textScale: 999 });
     expect(app.ui.layout.splitRows).toBe(99);
     expect(app.ui.layout.timerScale).toBe(50);
+    expect(app.ui.layout.textScale).toBe(200);
     app.sync.setTimerLayout({ splitRows: Number.NaN });
     expect(app.ui.layout.splitRows).toBe(99);
   });

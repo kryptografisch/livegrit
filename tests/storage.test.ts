@@ -96,6 +96,7 @@ describe('SplitterDb', () => {
       compactSplits: true,
       splitRows: 4,
       timerScale: 150,
+      textScale: 80,
     };
     settings.showButtons = false;
     settings.lastRunId = 'abc';
@@ -162,7 +163,13 @@ describe('parseSettings', () => {
     expect(parsed).toEqual(defaultSettings());
 
     const partly = parseSettings({
-      timerLayout: { info: false, splitRows: 0, timerScale: 'big', inputDevices: 'no' },
+      timerLayout: {
+        info: false,
+        splitRows: 0,
+        timerScale: 'big',
+        textScale: 'x',
+        inputDevices: 'no',
+      },
       comparison: 'Average Segments',
     });
     expect(partly).toEqual({

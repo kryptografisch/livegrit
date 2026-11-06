@@ -29,6 +29,7 @@
 
 <style>
   .timer-buttons {
+    font-size: calc(1em * var(--text-scale, 1));
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);

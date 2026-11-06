@@ -15,6 +15,7 @@
 
 <style>
   .info-list {
+    font-size: calc(1em * var(--text-scale, 1));
     margin: 0;
     padding: var(--space-1) var(--space-3) var(--space-2);
     border-top: 1px solid var(--color-border);

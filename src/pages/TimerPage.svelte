@@ -79,7 +79,7 @@
 
 <svelte:window onresize={() => windowSize.resize()} />
 
-<section class="timer-page">
+<section class="timer-page" style:--text-scale={layout.textScale / 100}>
   {#if imports.error}
     <div class="banner" role="alert">
       <span>{imports.error}</span>

@@ -1,7 +1,7 @@
 <script lang="ts">
   // Settings → Timer. "Timing": comparison and timing method (only while splits are
   // loaded; the timing method only if they have Game Time). "UI": what the Timer page
-  // shows (`timerUi.layout`), with nested toggles: sub options are greyed out while their
+  // shows (`timerUi.layout`, incl. the timer and font size sliders), with nested toggles: sub options are greyed out while their
   // area is off, and keep their value. Saved on change; other windows apply them right
   // away.
   import type { StorageSync } from '../storage/storageSync.svelte';
@@ -9,6 +9,9 @@
   import {
     SPLIT_ROWS_MAX,
     SPLIT_ROWS_MIN,
+    TEXT_SCALE_MAX,
+    TEXT_SCALE_MIN,
+    TEXT_SCALE_STEP,
     TIMER_SCALE_MAX,
     TIMER_SCALE_MIN,
     TIMER_SCALE_STEP,
@@ -28,10 +31,35 @@
     storage.setTimerLayout(patch);
   }
 
-  /** The timer size while the slider moves (applied on release). */
-  let scaleDraft = $state<number | null>(null);
-  const scale = $derived(scaleDraft ?? layout.timerScale);
+  type Scale = 'timerScale' | 'textScale';
+
+  /** A size slider's value while it moves (applied on release). */
+  let drafts = $state<Partial<Record<Scale, number>>>({});
 </script>
+
+{#snippet scaleSlider(key: Scale, label: string, min: number, max: number, step: number)}
+  {@const value = drafts[key] ?? layout[key]}
+  <div class="field slider">
+    <label for={key}>{label}</label>
+    <input
+      id={key}
+      type="range"
+      {min}
+      {max}
+      {step}
+      {value}
+      oninput={(e) => (drafts[key] = e.currentTarget.valueAsNumber)}
+      onchange={(e) => {
+        set({ [key]: e.currentTarget.valueAsNumber });
+        delete drafts[key];
+      }}
+    />
+    <span class="value">{value} %</span>
+    {#if layout[key] !== 100}
+      <button type="button" class="small" onclick={() => set({ [key]: 100 })}>Reset</button>
+    {/if}
+  </div>
+{/snippet}
 
 {#snippet check(key: Flag, label: string, disabled = false)}
   <label class="check" class:disabled>
@@ -81,6 +109,14 @@
 
 <h2>UI</h2>
 <div class="fields">
+  {@render scaleSlider(
+    'textScale',
+    'Font size (header, splits, info, buttons)',
+    TEXT_SCALE_MIN,
+    TEXT_SCALE_MAX,
+    TEXT_SCALE_STEP,
+  )}
+
   <div class="group">
     {@render check('header', 'Game and category header')}
     <div class="sub">
@@ -112,26 +148,13 @@
     </div>
   </div>
 
-  <div class="field">
-    <label for="timer-scale">Timer size</label>
-    <input
-      id="timer-scale"
-      type="range"
-      min={TIMER_SCALE_MIN}
-      max={TIMER_SCALE_MAX}
-      step={TIMER_SCALE_STEP}
-      value={scale}
-      oninput={(e) => (scaleDraft = e.currentTarget.valueAsNumber)}
-      onchange={(e) => {
-        set({ timerScale: e.currentTarget.valueAsNumber });
-        scaleDraft = null;
-      }}
-    />
-    <span class="value">{scale} %</span>
-    {#if layout.timerScale !== 100}
-      <button type="button" class="small" onclick={() => set({ timerScale: 100 })}>Reset</button>
-    {/if}
-  </div>
+  {@render scaleSlider(
+    'timerScale',
+    'Timer size',
+    TIMER_SCALE_MIN,
+    TIMER_SCALE_MAX,
+    TIMER_SCALE_STEP,
+  )}
 
   <div class="group">
     {@render check('info', 'Info below the timer')}
@@ -176,6 +199,11 @@
     align-items: center;
     gap: var(--space-2);
     color: var(--color-text-muted);
+  }
+
+  /* Like the checkboxes around them (not greyed like the other fields). */
+  .slider {
+    color: var(--color-text);
   }
 
   .check {

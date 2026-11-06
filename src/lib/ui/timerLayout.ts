@@ -14,6 +14,8 @@ export interface TimerLayout {
   splitRows: number;
   /** The running timer's size in percent of the default. */
   timerScale: number;
+  /** The Timer page text size (header, splits, info, buttons) in percent of the default. */
+  textScale: number;
   /** The info area below the timer. */
   info: boolean;
   infoPreviousSegment: boolean;
@@ -28,6 +30,9 @@ export const SPLIT_ROWS_MAX = 99;
 export const TIMER_SCALE_MIN = 50;
 export const TIMER_SCALE_MAX = 200;
 export const TIMER_SCALE_STEP = 10;
+export const TEXT_SCALE_MIN = 50;
+export const TEXT_SCALE_MAX = 200;
+export const TEXT_SCALE_STEP = 10;
 
 export function defaultTimerLayout(): TimerLayout {
   return {
@@ -38,6 +43,7 @@ export function defaultTimerLayout(): TimerLayout {
     compactSplits: false,
     splitRows: 10,
     timerScale: 100,
+    textScale: 100,
     info: true,
     infoPreviousSegment: true,
     infoSumOfBest: true,
@@ -83,5 +89,6 @@ export function parseTimerLayout(
   }
   out.splitRows = clampInt(record.splitRows, SPLIT_ROWS_MIN, SPLIT_ROWS_MAX) ?? out.splitRows;
   out.timerScale = clampInt(record.timerScale, TIMER_SCALE_MIN, TIMER_SCALE_MAX) ?? out.timerScale;
+  out.textScale = clampInt(record.textScale, TEXT_SCALE_MIN, TEXT_SCALE_MAX) ?? out.textScale;
   return out;
 }

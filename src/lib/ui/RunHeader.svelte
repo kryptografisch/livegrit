@@ -37,6 +37,7 @@
 
 <style>
   .run-header {
+    font-size: calc(1em * var(--text-scale, 1));
     position: relative;
     min-height: calc(1lh + 2 * var(--space-2));
     text-align: center;
@@ -46,7 +47,7 @@
   }
 
   .game {
-    font-size: var(--font-size-lg);
+    font-size: calc(var(--font-size-lg) * var(--text-scale, 1));
     overflow-wrap: anywhere;
   }
 
