@@ -35,4 +35,4 @@ See [docs/future-features.md](docs/future-features.md) for what's next.
 
 Licensed under the [Apache License, Version 2.0](LICENSE).
 
-Exception: `vendor/livesplit-core/` is the built [livesplit-core](https://github.com/LiveSplit/livesplit-core), licensed under MIT or Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE` in that folder).
+Exception: `vendor/livesplit-core/` is the built [livesplit-core](https://github.com/LiveSplit/livesplit-core), licensed under MIT or Apache-2.0.
