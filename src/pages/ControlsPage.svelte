@@ -11,13 +11,6 @@
 <section class="controls-page">
   <h1>Controls</h1>
 
-  <div class="focus-warning" role="note">
-    <strong>Input only works while the timer is focused.</strong>
-    Browsers send keyboard and gamepad input only to the focused tab/window. While you play, the game
-    has the focus, so the timer can't see your presses. Keep the timer window focused (for example on
-    a second screen next to a console or emulator capture), or use the on-screen buttons.
-  </div>
-
   <h2>Devices</h2>
   <DevicePanel devices={inputDevices} source={gamepadSource} />
 
@@ -28,6 +21,11 @@
     <h2>Timer</h2>
     <TimerSettings store={timerStore} />
   {/if}
+
+  <p class="note">
+    Keyboard keys only reach the timer while its window is focused. Gamepads also work while another
+    app (e.g. the game) has the focus.
+  </p>
 </section>
 
 <style>
@@ -46,17 +44,9 @@
     margin: var(--space-4) 0 var(--space-2);
   }
 
-  .focus-warning {
-    padding: var(--space-2) var(--space-3);
-    color: var(--color-text);
-    background: var(--color-surface);
-    border: 1px solid var(--color-warning);
-    border-left-width: 4px;
-    border-radius: var(--radius-1);
-  }
-
-  .focus-warning strong {
-    display: block;
-    color: var(--color-warning);
+  .note {
+    margin: var(--space-4) 0 0;
+    font-size: 0.875em;
+    color: var(--color-text-muted);
   }
 </style>

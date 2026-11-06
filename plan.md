@@ -22,10 +22,6 @@ A browser-only, installable (PWA) speedrun split timer, similar in look and beha
 - LiveSplit Server, auto-splitters, layouts editor, leaderboards/uploads, multi-user/cloud sync.
 - Run-history graphs and other analytics beyond what the timer needs.
 
-### Known browser limitation (document it in the UI)
-
-Keyboard and Gamepad input only reach the page **while its tab/window is focused**. The timer must be in focus or on a second screen during a run. Say so on the Controls page.
-
 ## 2. Decisions already made (do not revisit)
 
 | Topic        | Decision                                                                                                                              |
@@ -115,12 +111,11 @@ public/                       # icons, manifest assets
 ### 6.2 Controls page
 
 - Table of Actions with **keyboard binding** and **gamepad binding**, each with "Press a key/button…" capture mode, clear, and reset-to-defaults. Allow multiple bindings per action.
-- Gamepad: show connected pads, live button state for easy mapping, and a note that the page must have focus (some browsers hide pads until a button is pressed once).
+- Gamepad: show connected pads, live button state for easy mapping, and a note that some browsers hide pads until a button is pressed once.
 - Comparison selector (Personal Best, Best Segments, Average Segments, etc., whatever the loaded run offers).
 - Timing method toggle (real time / game time) if the loaded run has game time.
 - Run management: import `.lss`, export `.lss`, list/delete saved runs, "new empty run" (name + split names).
 - Storage status: `persisted()` result, `estimate()` usage, "Request persistent storage" button.
-- Visible warning about the focus limitation.
 
 ### 6.3 Input handling
 
@@ -181,7 +176,7 @@ Behavior:
 ## 10. Risks and notes
 
 - **livesplit-core build tooling is the biggest risk** (section 4). API names in the new bindings differ from the 2018 npm typings; always read the generated `.d.ts`.
-- Browsers throttle timers in background tabs; rendering via `requestAnimationFrame` stops when hidden, but the core's time stays correct because it uses timestamps. Input is also unavailable when not focused, which is expected.
+- Browsers throttle timers in background tabs; rendering via `requestAnimationFrame` stops when hidden, but the core's time stays correct because it uses timestamps.
 - Safari may evict script-written storage after about 7 days of non-use unless installed to the Home Screen; the persistent-storage request is best-effort. Keep export prominent.
 - Gamepad IDs and button indices differ across browsers and OSes; store raw index plus a human-readable label and let the user remap.
 - Licensing: livesplit-core is MIT/Apache-style; keep license files in `vendor/`. Do not copy LiveSplit/LiveSplit One UI assets or code without checking their licenses; use them only as a reference for how the core is wired.

@@ -99,8 +99,7 @@
   {/each}
 </ul>
 <p class="hint">
-  Press a button on your controller to detect it (browsers hide pads until a button is pressed while
-  this page is focused).
+  Press a button on your controller to detect it (browsers hide pads until a button is pressed).
 </p>
 
 <style>
