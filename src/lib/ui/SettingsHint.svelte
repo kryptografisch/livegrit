@@ -16,17 +16,9 @@
 {/if}
 
 <style>
-  /* Same top and height as the gear (padding + 18px icon), right next to it. */
+  /* In the bottom bar, right before the gear (the parent places it). */
   .settings-hint {
-    --gear-size: calc(18px + 2 * var(--space-1));
-    position: absolute;
-    top: var(--space-1);
-    right: calc(var(--space-1) + var(--gear-size) + var(--space-1));
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    height: var(--gear-size);
-    font-size: 0.875em;
+    display: inline-block;
     white-space: nowrap;
     pointer-events: none;
     /* The band (40–60 % of a 250 % wide gradient) sweeps from left to right while the

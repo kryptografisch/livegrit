@@ -37,10 +37,10 @@ describe('layout view', () => {
       expect(view.splits?.columnCount).toBe(2);
       expect(view.splits?.rows.some((r) => r.isCurrent)).toBe(false);
       expect(view.timer?.color).toBe('NotRunning');
-      expect(view.info.map((i) => i.key)).toEqual([
-        'Previous Segment',
-        'Sum of Best Segments',
-        'Possible Time Save',
+      expect(view.info.map((i) => [i.id, i.key])).toEqual([
+        ['previousSegment', 'Previous Segment'],
+        ['sumOfBest', 'Sum of Best Segments'],
+        ['possibleTimeSave', 'Possible Time Save'],
       ]);
     } finally {
       imageCache[Symbol.dispose]();

@@ -185,6 +185,7 @@ export function createDefaultLayout(options: LayoutOptions = {}): Layout {
   }
   layout.push(splits.intoGeneric());
   layout.push(TimerComponent.new().intoGeneric());
+  // Key/value components: keep this order in step with `INFO_IDS` (layoutView).
   layout.push(PreviousSegmentComponent.new().intoGeneric());
   layout.push(SumOfBestComponent.new().intoGeneric());
   layout.push(PossibleTimeSaveComponent.new().intoGeneric());

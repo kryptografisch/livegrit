@@ -14,6 +14,7 @@ import {
   type WindowLink,
 } from '../src/lib/storage/storageSync.svelte';
 import { ImportFlow } from '../src/lib/ui/importFlow.svelte';
+import { defaultTimerLayout, type TimerLayout } from '../src/lib/ui/timerLayout';
 import { ManualTicker } from '../src/lib/ticker';
 import { initCore, parseRun, segmentNames } from '../src/lib/timer/core';
 import { ATTEMPT_IN_PROGRESS_MESSAGE } from '../src/lib/timer/lss';
@@ -51,7 +52,7 @@ afterEach(async () => {
 interface App {
   store: TimerStore;
   input: InputManager;
-  ui: { showButtons: boolean };
+  ui: { showButtons: boolean; layout: TimerLayout };
   sync: StorageSync;
   db: SplitterDb | null;
   gesture: (() => void) | null;
@@ -76,7 +77,7 @@ async function startApp(
   const app: App = {
     store,
     input,
-    ui: { showButtons: true },
+    ui: { showButtons: true, layout: defaultTimerLayout() },
     db: null,
     gesture: null,
     persistCalls: 0,
@@ -212,18 +213,39 @@ describe('StorageSync', () => {
     expect(historyOf(reset?.lss)).toBe(1);
   });
 
-  it('saves and restores bindings, visible rows and the buttons toggle', async () => {
+  it('saves and restores bindings, the timer layout and the buttons toggle', async () => {
     const app = await startApp();
+    expect(app.store.visibleRows).toBe(0); // all rows by default
     const bindings = withBinding(app.input.bindings, 'split', padButton(0)).bindings;
     app.input.bindings = bindings;
-    app.store.visibleRows = 4;
+    app.sync.setTimerLayout({ compactSplits: true, splitRows: 4, headerGame: false });
     app.sync.setShowButtons(false);
+    expect(app.store.visibleRows).toBe(4);
     await settle();
 
     const again = await startApp();
     expect(again.input.bindings).toEqual(bindings);
     expect(again.store.visibleRows).toBe(4);
+    expect(again.ui.layout).toEqual({
+      ...defaultTimerLayout(),
+      compactSplits: true,
+      splitRows: 4,
+      headerGame: false,
+    });
     expect(again.ui.showButtons).toBe(false);
+  });
+
+  it('shows all split rows while compact splits are off, and clamps the numbers', async () => {
+    const app = await startApp();
+    app.sync.setTimerLayout({ splitRows: 6 });
+    expect(app.store.visibleRows).toBe(0);
+    app.sync.setTimerLayout({ compactSplits: true });
+    expect(app.store.visibleRows).toBe(6);
+    app.sync.setTimerLayout({ splitRows: 500, timerScale: 10 });
+    expect(app.ui.layout.splitRows).toBe(99);
+    expect(app.ui.layout.timerScale).toBe(50);
+    app.sync.setTimerLayout({ splitRows: Number.NaN });
+    expect(app.ui.layout.splitRows).toBe(99);
   });
 
   it('keeps the install bar dismissed after a reload', async () => {
@@ -725,7 +747,7 @@ describe('StorageSync with several windows', () => {
 
     const bindings = withBinding(settings.input.bindings, 'split', padButton(3)).bindings;
     settings.input.bindings = bindings;
-    settings.store.visibleRows = 3;
+    settings.sync.setTimerLayout({ compactSplits: true, splitRows: 3, timerScale: 150 });
     settings.sync.setShowButtons(false);
     settings.store.setComparison('Best Segments');
     settings.store.setTimingMethod('GameTime');
@@ -733,6 +755,7 @@ describe('StorageSync with several windows', () => {
 
     expect(timer.input.bindings).toEqual(bindings);
     expect(timer.store.visibleRows).toBe(3);
+    expect(timer.ui.layout.timerScale).toBe(150);
     expect(timer.ui.showButtons).toBe(false);
     expect(timer.store.comparison).toBe('Best Segments');
     expect(timer.store.timingMethod).toBe('GameTime');
@@ -757,11 +780,11 @@ describe('StorageSync with several windows', () => {
 
   it('does not lose changes of one window when the other one saves', async () => {
     const { timer, settings } = await twoWindows();
-    settings.store.visibleRows = 5;
+    settings.sync.setTimerLayout({ splitRows: 5 });
     timer.sync.saveTimerWindowSize({ width: 320, height: 480 });
     await settle();
     const stored = await readDb((db) => db.getSettings());
-    expect(stored.visibleRows).toBe(5);
+    expect(stored.timerLayout.splitRows).toBe(5);
     expect(stored.timerWindowSize).toEqual({ width: 320, height: 480 });
     expect(settings.sync.timerWindowSize).toEqual({ width: 320, height: 480 });
   });

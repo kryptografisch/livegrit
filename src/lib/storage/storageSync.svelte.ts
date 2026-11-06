@@ -25,6 +25,7 @@ import {
   readSplitsFile,
 } from '../timer/lss';
 import type { StoreSetting, TimerStore } from '../timer/timerStore.svelte';
+import { parseTimerLayout, visibleSplitRows, type TimerLayout } from '../ui/timerLayout';
 import { newRunId, runDisplayName, SplitterDb, type RunRecord } from './db';
 import { onFirstUserGesture, persist, persisted } from './persist';
 import { defaultSettings, type Settings, type WindowSize } from './settings';
@@ -41,9 +42,10 @@ export interface WindowLink {
   readonly remoteAttemptEnded: boolean;
 }
 
-/** UI settings outside the timer store (the Timer page's on-screen buttons). */
+/** UI settings outside the timer store (the Timer page's on-screen buttons and layout). */
 export interface UiSettings {
   showButtons: boolean;
+  layout: TimerLayout;
 }
 
 /** How persistent storage is requested; tests pass `null` to skip it. */
@@ -228,7 +230,8 @@ export class StorageSync {
       if (settings.showButtons !== null) this.#ui.showButtons = settings.showButtons;
       this.installBarDismissed = settings.installBarDismissed;
       this.timerWindowSize = settings.timerWindowSize;
-      this.#store.visibleRows = settings.visibleRows;
+      this.#ui.layout = { ...settings.timerLayout };
+      this.#store.visibleRows = visibleSplitRows(settings.timerLayout);
     } finally {
       this.#applying = false;
     }
@@ -590,6 +593,17 @@ export class StorageSync {
     void this.#saveSettings({ showButtons: show });
   }
 
+  /**
+   * Changes what the Timer page shows and saves it (out of range numbers are clamped).
+   * The split rows go to the timer store (compact splits).
+   */
+  setTimerLayout(patch: Partial<TimerLayout>): void {
+    const layout = parseTimerLayout({ ...this.#ui.layout, ...patch }, this.#ui.layout);
+    this.#ui.layout = layout;
+    this.#store.visibleRows = visibleSplitRows(layout);
+    void this.#saveSettings({ timerLayout: { ...layout } });
+  }
+
   /** Hides the Timer page install bar for good (Settings → Data keeps its own button). */
   dismissInstallBar(): void {
     if (this.installBarDismissed) return;
@@ -627,9 +641,6 @@ export class StorageSync {
         break;
       case 'timingMethod':
         void this.#saveSettings({ timingMethod: store.timingMethod });
-        break;
-      case 'visibleRows':
-        void this.#saveSettings({ visibleRows: store.visibleRows });
         break;
     }
   }

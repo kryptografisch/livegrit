@@ -1,8 +1,9 @@
 <script lang="ts">
   // The Timer page: only what's needed during a run (header, split list, big timer, info
-  // footer, the optional on-screen buttons, the last used device). The gear (top right)
-  // opens the Settings window; while one is open a modal says so and timer input is off.
-  // At the bottom: the window size hint (`WindowSizeMemory`).
+  // footer, the optional on-screen buttons). Which parts show is set in Settings → Timer →
+  // UI (`timerUi.layout`). At the bottom: the window size hint (`WindowSizeMemory`), then
+  // a bar with the used input devices and the gear (always there), which opens the
+  // Settings window; while one is open a modal says so and timer input is off.
   import { onMount, untrack } from 'svelte';
   import { timerStore } from '../lib/timer/timerStore.svelte';
   import { appStorage } from '../lib/storage/appStorage';
@@ -52,6 +53,24 @@
   }
 
   const view = $derived(timerStore.view);
+  const layout = $derived(timerUi.layout);
+  const headerGame = $derived(layout.headerGame ? timerStore.gameName : '');
+  const headerCategory = $derived(layout.headerCategory ? timerStore.categoryName : '');
+  const showHeader = $derived(
+    layout.header &&
+      (headerGame !== '' ||
+        headerCategory !== '' ||
+        (layout.headerAttempts &&
+          (view?.title?.attempts != null || view?.title?.finishedRuns != null))),
+  );
+  const infoShown = $derived({
+    previousSegment: layout.infoPreviousSegment,
+    sumOfBest: layout.infoSumOfBest,
+    possibleTimeSave: layout.infoPossibleTimeSave,
+  });
+  const info = $derived(
+    layout.info && view ? view.info.filter((item) => item.id === null || infoShown[item.id]) : [],
+  );
   /** No splits loaded and none saved: points out the gear (`SettingsHint`). */
   const newUser = $derived(
     appStorage.restored && timerStore.ready && !view && appStorage.runs.length === 0,
@@ -61,23 +80,6 @@
 <svelte:window onresize={() => windowSize.resize()} />
 
 <section class="timer-page">
-  <button
-    type="button"
-    class="gear"
-    onclick={() => openSettings()}
-    disabled={timerStore.attemptInProgress}
-    aria-label="Settings"
-    title={timerStore.attemptInProgress
-      ? 'Settings (reset or finish the attempt first)'
-      : 'Settings'}
-  >
-    <GearIcon />
-  </button>
-
-  {#if newUser}
-    <SettingsHint />
-  {/if}
-
   {#if imports.error}
     <div class="banner" role="alert">
       <span>{imports.error}</span>
@@ -87,8 +89,13 @@
   <DuplicatePrompt flow={imports} />
 
   {#if view}
-    {#if view.title}
-      <RunHeader title={view.title} />
+    {#if view.title && showHeader}
+      <RunHeader
+        title={view.title}
+        game={headerGame}
+        category={headerCategory}
+        showAttempts={layout.headerAttempts}
+      />
     {/if}
     {#if view.splits}
       <SplitList splits={view.splits} onscroll={(d) => timerStore.scrollSplits(d)} />
@@ -96,10 +103,10 @@
       <div class="spacer"></div>
     {/if}
     {#if view.timer}
-      <BigTimer timer={view.timer} />
+      <BigTimer timer={view.timer} scale={layout.timerScale} />
     {/if}
-    {#if view.info.length > 0}
-      <InfoList info={view.info} />
+    {#if info.length > 0}
+      <InfoList {info} />
     {/if}
     {#if timerUi.showButtons}
       <TimerButtons store={timerStore} input={inputManager} />
@@ -133,8 +140,29 @@
     </div>
   {/if}
 
-  <InputDeviceStatus devices={inputDevices} />
   <WindowSizeHint memory={windowSize} />
+  <footer class="bottom-bar">
+    {#if layout.inputDevices}
+      <InputDeviceStatus devices={inputDevices} />
+    {/if}
+    <div class="settings">
+      {#if newUser}
+        <SettingsHint />
+      {/if}
+      <button
+        type="button"
+        class="gear"
+        onclick={() => openSettings()}
+        disabled={timerStore.attemptInProgress}
+        aria-label="Settings"
+        title={timerStore.attemptInProgress
+          ? 'Settings (reset or finish the attempt first)'
+          : 'Settings'}
+      >
+        <GearIcon size={16} />
+      </button>
+    </div>
+  </footer>
   <SettingsOpenDialog />
 </section>
 
@@ -148,13 +176,31 @@
     background: var(--color-bg);
   }
 
-  /* Small, always visible, over the header's top right corner; greyed out during an
-     attempt (Settings can't be opened then). */
+  /* The devices text centered (between two equal side columns), the settings group on
+     the right. Without the devices text only the gear is left, still on the right. */
+  .bottom-bar {
+    display: grid;
+    grid-template-columns: 1fr minmax(0, max-content) 1fr;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0 var(--space-1) 0 var(--space-3);
+    font-size: 0.75em;
+  }
+
+  .bottom-bar > :global(.input-device) {
+    grid-column: 2;
+  }
+
+  .settings {
+    grid-column: 3;
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  /* Small, always visible; greyed out during an attempt (Settings can't be opened then). */
   .gear {
-    position: absolute;
-    top: var(--space-1);
-    right: var(--space-1);
-    z-index: 1;
     display: grid;
     place-items: center;
     padding: var(--space-1);
@@ -287,7 +333,6 @@
     align-items: start;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
-    padding-right: 2.5rem; /* room for the gear */
     color: var(--color-warning);
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-warning);

@@ -43,8 +43,6 @@ const phases: Record<number, Phase> = {
 
 export type TimingMethodName = 'RealTime' | 'GameTime';
 
-export const DEFAULT_VISIBLE_ROWS = 10;
-
 /** `TimerStore.exportLss()`: the .lss text, a file name and what the saved list shows. */
 export interface ExportedLss extends AttemptStats {
   text: string;
@@ -54,7 +52,7 @@ export interface ExportedLss extends AttemptStats {
 }
 
 /** Settings that `TimerStore.onSettingsChange` reports. */
-export type StoreSetting = 'comparison' | 'timingMethod' | 'visibleRows';
+export type StoreSetting = 'comparison' | 'timingMethod';
 
 export interface TimerStoreOptions {
   /** Defaults to the shared rAF ticker. Tests pass a `ManualTicker`. */
@@ -74,6 +72,13 @@ export class TimerStore {
   timingMethod = $state<TimingMethodName>('RealTime');
   /** Whether the run has any Game Time; the timing method toggle is only offered then. */
   hasGameTime = $state(false);
+  /**
+   * The run's game and category names. The Timer page header uses these rather than the
+   * title component's lines: the core moves the category up to line 1 when there is no
+   * game name, so the lines alone don't say which is which.
+   */
+  gameName = $state('');
+  categoryName = $state('');
 
   /**
    * Called after a successful reset, with the timer (its run already contains the attempt).
@@ -85,12 +90,12 @@ export class TimerStore {
   onAttemptEnded: ((timer: TimerRef) => void) | null = null;
 
   /**
-   * Called when the user changes a setting through the store (comparison, timing method,
-   * visible rows), e.g. to save it. Not called by `loadRun`.
+   * Called when the user changes a setting through the store (comparison, timing method),
+   * e.g. to save it. Not called by `loadRun`.
    */
   onSettingsChange: ((setting: StoreSetting) => void) | null = null;
 
-  #visibleRows = $state(DEFAULT_VISIBLE_ROWS);
+  #visibleRows = $state(0);
   #ticker: Ticker | undefined;
   #unsubscribe: (() => void) | null = null;
   #initializing: Promise<void> | null = null;
@@ -137,7 +142,10 @@ export class TimerStore {
     return this.#timer;
   }
 
-  /** Split rows shown at once (0 = all). Changing it rebuilds the layout. */
+  /**
+   * Split rows shown at once (0 = all). Changing it rebuilds the layout. Set by the
+   * storage layer from the Timer layout settings (compact splits).
+   */
   get visibleRows(): number {
     return this.#visibleRows;
   }
@@ -151,7 +159,6 @@ export class TimerStore {
       this.#layout = createDefaultLayout({ visibleRows: next });
       this.#invalidate();
     }
-    this.onSettingsChange?.('visibleRows');
   }
 
   /** Replaces the current run. **Consumes `run`.** Throws if it has no segments. */
@@ -187,6 +194,8 @@ export class TimerStore {
     this.comparison = '';
     this.timingMethod = 'RealTime';
     this.hasGameTime = false;
+    this.gameName = '';
+    this.categoryName = '';
   }
 
   splitOrStart(): void {
@@ -301,6 +310,8 @@ export class TimerStore {
     this.comparison = '';
     this.timingMethod = 'RealTime';
     this.hasGameTime = false;
+    this.gameName = '';
+    this.categoryName = '';
     this.ready = false;
   }
 
@@ -330,6 +341,8 @@ export class TimerStore {
     const run = timer.getRun();
     this.comparisons = comparisonNames(run);
     this.hasGameTime = runHasGameTime(run);
+    this.gameName = run.gameName();
+    this.categoryName = run.categoryName();
   }
 
   #requireInit(): void {

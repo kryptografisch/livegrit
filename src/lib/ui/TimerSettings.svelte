@@ -1,14 +1,51 @@
 <script lang="ts">
-  // Settings → Timer: comparison and timing method (only while splits are loaded; the
-  // timing method only if they have Game Time), visible split rows and the on-screen timer
-  // buttons. Saved on change; other windows apply them right away.
+  // Settings → Timer. "Timing": comparison and timing method (only while splits are
+  // loaded; the timing method only if they have Game Time). "UI": what the Timer page
+  // shows (`timerUi.layout`), with nested toggles: sub options are greyed out while their
+  // area is off, and keep their value. Saved on change; other windows apply them right
+  // away.
   import type { StorageSync } from '../storage/storageSync.svelte';
   import type { TimerStore } from '../timer/timerStore.svelte';
+  import {
+    SPLIT_ROWS_MAX,
+    SPLIT_ROWS_MIN,
+    TIMER_SCALE_MAX,
+    TIMER_SCALE_MIN,
+    TIMER_SCALE_STEP,
+    type TimerLayout,
+  } from './timerLayout';
   import { timerUi } from './timerUi.svelte';
 
   let { store, storage }: { store: TimerStore; storage: StorageSync } = $props();
+
+  const layout = $derived(timerUi.layout);
+
+  type Flag = {
+    [K in keyof TimerLayout]: TimerLayout[K] extends boolean ? K : never;
+  }[keyof TimerLayout];
+
+  function set(patch: Partial<TimerLayout>) {
+    storage.setTimerLayout(patch);
+  }
+
+  /** The timer size while the slider moves (applied on release). */
+  let scaleDraft = $state<number | null>(null);
+  const scale = $derived(scaleDraft ?? layout.timerScale);
 </script>
 
+{#snippet check(key: Flag, label: string, disabled = false)}
+  <label class="check" class:disabled>
+    <input
+      type="checkbox"
+      checked={layout[key]}
+      {disabled}
+      onchange={(e) => set({ [key]: e.currentTarget.checked })}
+    />
+    {label}
+  </label>
+{/snippet}
+
+<h2>Timing</h2>
 <div class="fields">
   {#if store.comparisons.length > 0}
     <label class="field">
@@ -40,21 +77,74 @@
   {:else}
     <p class="muted">Load splits (Splits tab) to choose the comparison.</p>
   {/if}
+</div>
 
-  <label class="field">
-    Visible split rows
+<h2>UI</h2>
+<div class="fields">
+  <div class="group">
+    {@render check('header', 'Game and category header')}
+    <div class="sub">
+      {@render check('headerGame', 'Game name', !layout.header)}
+      {@render check('headerCategory', 'Category name', !layout.header)}
+      {@render check('headerAttempts', 'Number of attempts', !layout.header)}
+    </div>
+  </div>
+
+  <div class="group">
+    {@render check('compactSplits', 'Compact splits (scroll with the current split)')}
+    <div class="sub">
+      <label class="field" class:disabled={!layout.compactSplits}>
+        Visible split rows
+        <input
+          class="number"
+          type="number"
+          min={SPLIT_ROWS_MIN}
+          max={SPLIT_ROWS_MAX}
+          value={layout.splitRows}
+          disabled={!layout.compactSplits}
+          onchange={(e) => {
+            set({ splitRows: e.currentTarget.valueAsNumber });
+            // Out of range or empty: show the value that was kept.
+            e.currentTarget.value = String(timerUi.layout.splitRows);
+          }}
+        />
+      </label>
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="timer-scale">Timer size</label>
     <input
-      class="rows"
-      type="number"
-      min="0"
-      max="99"
-      value={store.visibleRows}
-      onchange={(e) => (store.visibleRows = e.currentTarget.valueAsNumber)}
+      id="timer-scale"
+      type="range"
+      min={TIMER_SCALE_MIN}
+      max={TIMER_SCALE_MAX}
+      step={TIMER_SCALE_STEP}
+      value={scale}
+      oninput={(e) => (scaleDraft = e.currentTarget.valueAsNumber)}
+      onchange={(e) => {
+        set({ timerScale: e.currentTarget.valueAsNumber });
+        scaleDraft = null;
+      }}
     />
-    <span class="muted">0 = all</span>
-  </label>
+    <span class="value">{scale} %</span>
+    {#if layout.timerScale !== 100}
+      <button type="button" class="small" onclick={() => set({ timerScale: 100 })}>Reset</button>
+    {/if}
+  </div>
 
-  <label class="field check">
+  <div class="group">
+    {@render check('info', 'Info below the timer')}
+    <div class="sub">
+      {@render check('infoPreviousSegment', 'Previous segment', !layout.info)}
+      {@render check('infoSumOfBest', 'Sum of best segments', !layout.info)}
+      {@render check('infoPossibleTimeSave', 'Possible time save', !layout.info)}
+    </div>
+  </div>
+
+  {@render check('inputDevices', 'Input devices row (the settings gear always stays)')}
+
+  <label class="check">
     <input
       type="checkbox"
       checked={timerUi.showButtons}
@@ -65,6 +155,15 @@
 </div>
 
 <style>
+  h2 {
+    font-size: var(--font-size-base);
+    margin: var(--space-4) 0 var(--space-2);
+  }
+
+  h2:first-child {
+    margin-top: 0;
+  }
+
   .fields {
     display: flex;
     flex-direction: column;
@@ -80,8 +179,32 @@
   }
 
   .check {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     color: var(--color-text);
     cursor: pointer;
+  }
+
+  .disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  /* Sub options: indented under their area's checkbox, with a guide line. */
+  .sub {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-left: 0.5rem;
+    padding-left: var(--space-3);
+    border-left: 1px solid var(--color-border);
   }
 
   .muted {
@@ -90,9 +213,15 @@
     color: var(--color-text-muted);
   }
 
+  .value {
+    min-width: 3.5em;
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+  }
+
   button,
   select,
-  .rows {
+  .number {
     padding: var(--space-2) var(--space-3);
     font: inherit;
     color: var(--color-text);
@@ -102,10 +231,19 @@
     cursor: pointer;
   }
 
-  .rows {
+  .number {
     width: 4.5rem;
     padding: var(--space-1) var(--space-2);
     cursor: text;
+  }
+
+  .number:disabled {
+    cursor: default;
+  }
+
+  button.small {
+    padding: var(--space-1) var(--space-2);
+    font-size: 0.875em;
   }
 
   select {

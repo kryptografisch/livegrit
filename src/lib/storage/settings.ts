@@ -8,7 +8,8 @@ import {
   serializeBindings,
   type Bindings,
 } from '../input/bindings';
-import { DEFAULT_VISIBLE_ROWS, type TimingMethodName } from '../timer/timerStore.svelte';
+import type { TimingMethodName } from '../timer/timerStore.svelte';
+import { defaultTimerLayout, parseTimerLayout, type TimerLayout } from '../ui/timerLayout';
 
 export const SETTINGS_VERSION = 1;
 
@@ -21,8 +22,8 @@ export interface Settings {
   comparison: string | null;
   /** The preferred timing method; Game Time is only applied to runs that have Game Time. */
   timingMethod: TimingMethodName;
-  /** Split rows shown at once (0 = all). */
-  visibleRows: number;
+  /** What the Timer page shows (header, split rows, timer size, info, devices row). */
+  timerLayout: TimerLayout;
   /** On-screen timer buttons on the Timer page; `null` = by device (touch screens: on). */
   showButtons: boolean | null;
   /** The run open when the app was last used, restored on reload. */
@@ -48,7 +49,7 @@ export function defaultSettings(): Settings {
     bindings: defaultBindings(),
     comparison: null,
     timingMethod: 'RealTime',
-    visibleRows: DEFAULT_VISIBLE_ROWS,
+    timerLayout: defaultTimerLayout(),
     showButtons: null,
     lastRunId: null,
     persistRequested: false,
@@ -63,7 +64,7 @@ export interface StoredSettings {
   bindings: ReturnType<typeof serializeBindings>;
   comparison: string | null;
   timingMethod: TimingMethodName;
-  visibleRows: number;
+  timerLayout: TimerLayout;
   showButtons: boolean | null;
   lastRunId: string | null;
   persistRequested: boolean;
@@ -77,7 +78,7 @@ export function serializeSettings(settings: Settings): StoredSettings {
     bindings: serializeBindings(settings.bindings),
     comparison: settings.comparison,
     timingMethod: settings.timingMethod,
-    visibleRows: settings.visibleRows,
+    timerLayout: { ...settings.timerLayout },
     showButtons: settings.showButtons,
     lastRunId: settings.lastRunId,
     persistRequested: settings.persistRequested,
@@ -103,10 +104,8 @@ export function parseSettings(data: unknown): Settings {
   if (data.timingMethod === 'RealTime' || data.timingMethod === 'GameTime') {
     out.timingMethod = data.timingMethod;
   }
-  const rows = data.visibleRows;
-  if (typeof rows === 'number' && Number.isInteger(rows) && rows >= 0 && rows <= 999) {
-    out.visibleRows = rows;
-  }
+  // The older `visibleRows` (0 = all) isn't read: rows are now off by default.
+  out.timerLayout = parseTimerLayout(data.timerLayout);
   if (typeof data.showButtons === 'boolean') out.showButtons = data.showButtons;
   if (typeof data.lastRunId === 'string' && data.lastRunId !== '') {
     out.lastRunId = data.lastRunId;

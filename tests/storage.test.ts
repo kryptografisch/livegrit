@@ -17,6 +17,7 @@ import {
   serializeSettings,
   SETTINGS_VERSION,
 } from '../src/lib/storage/settings';
+import { defaultTimerLayout } from '../src/lib/ui/timerLayout';
 
 let counter = 0;
 const opened: { db: SplitterDb; name: string }[] = [];
@@ -89,7 +90,13 @@ describe('SplitterDb', () => {
     settings.bindings.split.push(padHold(8, 0));
     settings.comparison = 'Best Segments';
     settings.timingMethod = 'GameTime';
-    settings.visibleRows = 0;
+    settings.timerLayout = {
+      ...settings.timerLayout,
+      header: false,
+      compactSplits: true,
+      splitRows: 4,
+      timerScale: 150,
+    };
     settings.showButtons = false;
     settings.lastRunId = 'abc';
     settings.persistRequested = true;
@@ -101,12 +108,12 @@ describe('SplitterDb', () => {
 
   it('updates single settings fields, keeping the others', async () => {
     const { db } = await freshDb();
-    await db.updateSettings({ visibleRows: 4 });
+    await db.updateSettings({ timerLayout: { ...defaultTimerLayout(), splitRows: 4 } });
     await db.updateSettings({ comparison: 'Best Segments', lastRunId: 'r1' });
     await db.updateSettings({ lastRunId: null });
     expect(await db.getSettings()).toEqual({
       ...defaultSettings(),
-      visibleRows: 4,
+      timerLayout: { ...defaultTimerLayout(), splitRows: 4 },
       comparison: 'Best Segments',
     });
   });
@@ -145,7 +152,7 @@ describe('parseSettings', () => {
       bindings: { version: 999, bindings: {} },
       comparison: '',
       timingMethod: 'Sundial',
-      visibleRows: -3,
+      timerLayout: 'big',
       showButtons: 'yes',
       lastRunId: 42,
       persistRequested: 'true',
@@ -154,10 +161,13 @@ describe('parseSettings', () => {
     });
     expect(parsed).toEqual(defaultSettings());
 
-    const partly = parseSettings({ visibleRows: 5, comparison: 'Average Segments' });
+    const partly = parseSettings({
+      timerLayout: { info: false, splitRows: 0, timerScale: 'big', inputDevices: 'no' },
+      comparison: 'Average Segments',
+    });
     expect(partly).toEqual({
       ...defaultSettings(),
-      visibleRows: 5,
+      timerLayout: { ...defaultTimerLayout(), info: false, splitRows: 1 },
       comparison: 'Average Segments',
     });
   });

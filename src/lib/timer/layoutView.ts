@@ -50,7 +50,16 @@ export interface TimerView {
   color: SemanticColor;
 }
 
+/**
+ * The key/value components, in the order `createDefaultLayout` adds them. Their keys can't
+ * identify them (the previous segment one turns into "Live Segment" during a run).
+ */
+export const INFO_IDS = ['previousSegment', 'sumOfBest', 'possibleTimeSave'] as const;
+export type InfoId = (typeof INFO_IDS)[number];
+
 export interface InfoView {
+  /** Which component it is (by position); `null` for any beyond `INFO_IDS`. */
+  id: InfoId | null;
   key: string;
   value: string;
   color: SemanticColor;
@@ -126,8 +135,13 @@ function timerView(state: TimerComponentStateJson): TimerView {
   return { time: state.time, fraction: state.fraction, color: state.semantic_color };
 }
 
-function infoView(state: KeyValueComponentStateJson): InfoView {
-  return { key: state.key, value: state.value, color: state.semantic_color };
+function infoView(state: KeyValueComponentStateJson, index: number): InfoView {
+  return {
+    id: INFO_IDS[index] ?? null,
+    key: state.key,
+    value: state.value,
+    color: state.semantic_color,
+  };
 }
 
 /** Builds the view model from `layout.updateStateAsJson(...)`. Unknown components are ignored. */
@@ -137,7 +151,8 @@ export function toLayoutView(state: LayoutStateJson): LayoutView {
     if ('Title' in component) view.title ??= titleView(component.Title);
     else if ('Splits' in component) view.splits ??= splitsView(component.Splits);
     else if ('Timer' in component) view.timer ??= timerView(component.Timer);
-    else if ('KeyValue' in component) view.info.push(infoView(component.KeyValue));
+    else if ('KeyValue' in component)
+      view.info.push(infoView(component.KeyValue, view.info.length));
   }
   return view;
 }
