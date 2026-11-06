@@ -2,10 +2,12 @@
   import { router } from './lib/router.svelte';
   import TimerPage from './pages/TimerPage.svelte';
   import ControlsPage from './pages/ControlsPage.svelte';
+  import DataPage from './pages/DataPage.svelte';
   import { timerStore } from './lib/timer/timerStore.svelte';
   import { wakeLock } from './lib/wakeLock';
   import { gamepadSource, inputManager, keyboardSource } from './lib/input/appInput';
   import { appStorage } from './lib/storage/appStorage';
+  import { modals } from './lib/ui/modal.svelte';
 
   // Restore the settings and the last run (on every start page), then keep them saved.
   // A core load error is shown by the Timer page.
@@ -13,9 +15,10 @@
     appStorage.start().catch(() => {});
   });
 
-  // Timer keys only act on the Timer page; the Controls page captures input for bindings.
+  // Timer keys only act on the Timer page (the Controls page captures input for bindings,
+  // the Data page has text fields), and not while a modal dialog is open.
   $effect(() => {
-    inputManager.enabled = router.route === 'timer';
+    inputManager.enabled = router.route === 'timer' && modals.open === 0;
   });
 
   $effect(() => {
@@ -38,11 +41,14 @@
   <nav class="nav">
     <a href="#/" class:active={router.route === 'timer'}>Timer</a>
     <a href="#/controls" class:active={router.route === 'controls'}>Controls</a>
+    <a href="#/data" class:active={router.route === 'data'}>Data</a>
   </nav>
 
   <main class="page">
     {#if router.route === 'controls'}
       <ControlsPage />
+    {:else if router.route === 'data'}
+      <DataPage />
     {:else}
       <TimerPage />
     {/if}

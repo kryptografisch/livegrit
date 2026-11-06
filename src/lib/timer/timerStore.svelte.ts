@@ -17,6 +17,7 @@ import type {
 } from 'livesplit-core';
 import { rafTicker, type Ticker } from '../ticker';
 import {
+  attemptStats,
   comparisonNames,
   core,
   createDefaultLayout,
@@ -25,6 +26,7 @@ import {
   parseRun,
   runHasGameTime,
   saveRunAsLss,
+  type AttemptStats,
   type WasmSource,
 } from './core';
 import { toLayoutView, type LayoutView } from './layoutView';
@@ -42,6 +44,14 @@ const phases: Record<number, Phase> = {
 export type TimingMethodName = 'RealTime' | 'GameTime';
 
 export const DEFAULT_VISIBLE_ROWS = 10;
+
+/** `TimerStore.exportLss()`: the .lss text, a file name and what the saved list shows. */
+export interface ExportedLss extends AttemptStats {
+  text: string;
+  fileName: string;
+  game: string;
+  category: string;
+}
 
 /** Settings that `TimerStore.onSettingsChange` reports. */
 export type StoreSetting = 'comparison' | 'timingMethod' | 'visibleRows';
@@ -114,6 +124,14 @@ export class TimerStore {
     return this.#timer !== null;
   }
 
+  /**
+   * True while an attempt is running or paused. A finished attempt (`Ended`) is over: it
+   * is already saved and only waits for the reset. Reactive (reads `phase`).
+   */
+  get attemptInProgress(): boolean {
+    return this.phase === 'Running' || this.phase === 'Paused';
+  }
+
   /** Read-only access to the timer, e.g. for saving. Don't keep the reference. */
   get timer(): TimerRef | null {
     return this.#timer;
@@ -156,6 +174,19 @@ export class TimerStore {
   loadSplits(input: string | Uint8Array): void {
     this.#requireInit();
     this.loadRun(parseRun(input));
+  }
+
+  /** Unloads the run (back to the empty state). The caller checks that no attempt runs. */
+  unloadRun(): void {
+    if (!this.#timer) return;
+    this.#timer[Symbol.dispose]();
+    this.#timer = null;
+    this.view = null;
+    this.phase = 'NotRunning';
+    this.comparisons = [];
+    this.comparison = '';
+    this.timingMethod = 'RealTime';
+    this.hasGameTime = false;
   }
 
   splitOrStart(): void {
@@ -209,16 +240,24 @@ export class TimerStore {
   }
 
   /**
-   * The run as .lss text plus a file name (`Game - Category.lss`), or `null` without a run.
-   * Includes the attempt history and, like LiveSplit, the state of a running attempt.
+   * The run as .lss text plus a file name (`Game - Category.lss`) and its attempt counts,
+   * or `null` without a run. Includes the attempt history and, like LiveSplit, the state of
+   * a running attempt (a finished one counts as completed).
    */
-  exportLss(): { text: string; fileName: string; game: string; category: string } | null {
+  exportLss(): ExportedLss | null {
     const timer = this.#timer;
     if (!timer) return null;
     const run = timer.getRun();
     const game = run.gameName();
     const category = run.categoryName();
-    return { text: saveRunAsLss(timer), fileName: lssFileName(game, category), game, category };
+    const ended = timer.currentPhase() === core().TimerPhase.Ended;
+    return {
+      text: saveRunAsLss(timer),
+      fileName: lssFileName(game, category),
+      game,
+      category,
+      ...attemptStats(run, ended),
+    };
   }
 
   /** Scrolls the split window (only has an effect when not all rows are visible). */

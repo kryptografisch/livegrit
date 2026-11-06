@@ -9,12 +9,15 @@
   import TimerButtons from '../lib/ui/TimerButtons.svelte';
   import RunToolbar from '../lib/ui/RunToolbar.svelte';
   import ImportButton from '../lib/ui/ImportButton.svelte';
+  import DuplicatePrompt from '../lib/ui/DuplicatePrompt.svelte';
+  import { ImportFlow } from '../lib/ui/importFlow.svelte';
   import { timerUi } from '../lib/ui/timerUi.svelte';
   import InputDeviceStatus from '../lib/ui/InputDeviceStatus.svelte';
   import { inputDevices, inputManager } from '../lib/input/appInput';
 
   let loadError = $state<string | null>(null);
-  let importError = $state<string | null>(null);
+  /** Imports from the picker or a drop; only errors are shown here (the timer shows the run). */
+  const imports = new ImportFlow(appStorage);
   /** Drag-and-drop: > 0 while files are dragged over the window (enter/leave nest). */
   let dragDepth = $state(0);
 
@@ -25,8 +28,8 @@
     });
   });
 
-  async function importFile(file: File) {
-    importError = await appStorage.importFile(file);
+  function importFile(file: File) {
+    void imports.start(file);
   }
 
   const hasFiles = (event: DragEvent) => event.dataTransfer?.types.includes('Files') ?? false;
@@ -69,12 +72,13 @@
 />
 
 <section class="timer-page">
-  {#if importError}
+  {#if imports.error}
     <div class="banner" role="alert">
-      <span>{importError}</span>
-      <button type="button" onclick={() => (importError = null)} aria-label="Dismiss">×</button>
+      <span>{imports.error}</span>
+      <button type="button" onclick={() => imports.dismiss()} aria-label="Dismiss">×</button>
     </div>
   {/if}
+  <DuplicatePrompt flow={imports} />
   {#if appStorage.error}
     <div class="banner" role="alert">
       <span>{appStorage.error}</span>
@@ -106,9 +110,12 @@
       {#if loadError}
         <p class="error">Could not start the timer: {loadError}</p>
       {:else if timerStore.ready && appStorage.restored}
-        <p>Import a .lss file or create a new run.</p>
+        <p>Import a .lss file or create new splits.</p>
         <ImportButton onfile={importFile} primary />
         <p class="hint">You can also drop a .lss file anywhere on this page.</p>
+        <p class="hint">
+          <a href="#/data">Create new splits or load saved ones on the Data page.</a>
+        </p>
       {:else}
         <p>Loading…</p>
       {/if}
@@ -120,7 +127,7 @@
   {#if dragDepth > 0}
     <div class="drop-overlay" aria-hidden="true">
       <p>
-        {timerStore.phase === 'NotRunning'
+        {!timerStore.attemptInProgress
           ? 'Drop the .lss file to import it'
           : 'Reset the current attempt before importing'}
       </p>
@@ -160,6 +167,10 @@
 
   .hint {
     font-size: 0.875em;
+  }
+
+  .hint a {
+    color: var(--color-text);
   }
 
   .error {

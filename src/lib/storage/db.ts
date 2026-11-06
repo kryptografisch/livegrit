@@ -22,6 +22,13 @@ export interface RunRecord {
   lss: string;
   /** `Date.now()` of the last save. */
   updatedAt: number;
+  /**
+   * Attempt counts at the last save, for the list (so it doesn't parse every .lss). Missing
+   * in records saved before they were added: `StorageSync.refreshRuns` fills them in once.
+   * Not indexed, so no schema version change was needed.
+   */
+  attempts?: number;
+  completed?: number;
 }
 
 interface SplitterSchema extends DBSchema {
@@ -117,7 +124,7 @@ export function newRunId(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** "Game - Category", or whichever is set, or "Untitled run". */
+/** "Game - Category", or whichever is set, or "Untitled splits". */
 export function runDisplayName(game: string, category: string): string {
-  return [game.trim(), category.trim()].filter((p) => p !== '').join(' - ') || 'Untitled run';
+  return [game.trim(), category.trim()].filter((p) => p !== '').join(' - ') || 'Untitled splits';
 }

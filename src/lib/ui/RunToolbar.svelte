@@ -1,5 +1,6 @@
 <script lang="ts">
-  // Temporary (step 5): import/export on the Timer page (step 10 moves it to Controls).
+  // Temporary (step 5): import/export on the Timer page (also on the Data page since step
+  // 10; this toolbar is removed in step 12).
   // Comparison + timing method moved to the Controls page in step 8.
   // Rows input and the on-screen buttons toggle: step 6 (Rows is removed in step 12).
   import type { TimerStore } from '../timer/timerStore.svelte';
@@ -10,7 +11,7 @@
 
   let { store, onimport }: { store: TimerStore; onimport: (file: File) => void } = $props();
 
-  const canImport = $derived(store.phase === 'NotRunning');
+  const canImport = $derived(!store.attemptInProgress);
 
   function exportRun() {
     const lss = store.exportLss();

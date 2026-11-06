@@ -1,6 +1,7 @@
 <script lang="ts">
   // Controls: bindings (with capture mode), input devices, comparison + timing method.
-  // Step 10 adds run management + storage status; step 12 turns this into Settings.
+  // Run management + storage status live on the Data page (step 10); step 12 turns this
+  // into Settings.
   import { gamepadSource, inputDevices, inputManager } from '../lib/input/appInput';
   import { timerStore } from '../lib/timer/timerStore.svelte';
   import BindingsTable from '../lib/ui/BindingsTable.svelte';

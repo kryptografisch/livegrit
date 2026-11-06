@@ -42,8 +42,7 @@ export interface SplitsTarget {
   loadSplits(input: Uint8Array): void;
 }
 
-export const ATTEMPT_IN_PROGRESS_MESSAGE =
-  'Reset the current attempt before importing another run.';
+export const ATTEMPT_IN_PROGRESS_MESSAGE = 'Reset the current attempt before loading other splits.';
 
 /**
  * Reads, parses and loads a splits file into the store. Returns `null` on success or a
@@ -65,6 +64,14 @@ export async function importSplitsFile(
   } catch (error) {
     return importErrorMessage(error, fileName);
   }
+}
+
+/** Segment names from a text field: one per line, trimmed, empty lines skipped. */
+export function parseSegmentNames(text: string): string[] {
+  return text
+    .split(/\r\n|\r|\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
 }
 
 // Characters that are invalid in file names on Windows/macOS/Linux, and control characters.

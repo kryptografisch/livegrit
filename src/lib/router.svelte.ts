@@ -1,12 +1,13 @@
-// Minimal hash router: `#/` = Timer, `#/controls` = Controls.
+// Minimal hash router: `#/` = Timer, `#/controls` = Controls, `#/data` = Data.
 // Hash routing needs no server config and works for an offline PWA.
 
-export type Route = 'timer' | 'controls';
+export type Route = 'timer' | 'controls' | 'data';
 
 const routes: Record<string, Route> = {
   '': 'timer',
   '/': 'timer',
   '/controls': 'controls',
+  '/data': 'data',
 };
 
 function parse(hash: string): Route {

@@ -7,9 +7,15 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { padButton, withBinding } from '../src/lib/input/bindings';
 import { InputManager } from '../src/lib/input/inputManager';
 import { SplitterDb } from '../src/lib/storage/db';
-import { StorageSync, type PersistRequester } from '../src/lib/storage/storageSync.svelte';
+import {
+  sameSplits,
+  StorageSync,
+  type PersistRequester,
+} from '../src/lib/storage/storageSync.svelte';
+import { ImportFlow } from '../src/lib/ui/importFlow.svelte';
 import { ManualTicker } from '../src/lib/ticker';
-import { initCore, parseRun } from '../src/lib/timer/core';
+import { initCore, parseRun, segmentNames } from '../src/lib/timer/core';
+import { ATTEMPT_IN_PROGRESS_MESSAGE } from '../src/lib/timer/lss';
 import { TimerStore } from '../src/lib/timer/timerStore.svelte';
 
 const fixture = (name: string) => readFile(new URL(`./fixtures/${name}`, import.meta.url));
@@ -273,5 +279,355 @@ describe('StorageSync', () => {
     app.gesture?.();
     await settle();
     expect(app.persistCalls).toBe(0);
+  });
+
+  describe('run management', () => {
+    it('lists saved runs, newest first, without their .lss', async () => {
+      let time = 10;
+      const app = await startApp({ now: () => time });
+      expect(app.sync.runs).toEqual([]);
+      expect(app.sync.available).toBe(true);
+      await app.sync.importFile(await file('real-time.lss'));
+      const first = app.sync.activeRunId;
+      time = 20;
+      await app.sync.importFile(await file('game-time.lss'));
+      const second = app.sync.activeRunId;
+      expect(app.sync.runs.map((r) => r.id)).toEqual([second, first]);
+      expect(app.sync.runs[0]).not.toHaveProperty('lss');
+      expect(app.sync.runs[0]?.updatedAt).toBe(20);
+
+      const again = await startApp();
+      expect(again.sync.runs.map((r) => r.id)).toEqual([second, first]);
+    });
+
+    it('opens a saved run and remembers it as the last run', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const first = app.sync.activeRunId!;
+      const firstLss = app.store.exportLss()?.text;
+      await app.sync.importFile(await file('game-time.lss'));
+
+      expect(await app.sync.openRun(first)).toBeNull();
+      expect(app.sync.activeRunId).toBe(first);
+      expect(app.store.exportLss()?.text).toBe(firstLss);
+      await settle();
+      expect((await readDb((db) => db.getSettings())).lastRunId).toBe(first);
+    });
+
+    it('refuses to open another run during an attempt', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const first = app.sync.activeRunId!;
+      await app.sync.importFile(await file('game-time.lss'));
+      const second = app.sync.activeRunId;
+      app.store.splitOrStart();
+      expect(await app.sync.openRun(first)).toBe(ATTEMPT_IN_PROGRESS_MESSAGE);
+      expect(app.sync.activeRunId).toBe(second);
+    });
+
+    it('treats a finished attempt as done: resets (and saves) it, then opens, imports or creates', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('new-run.lss'));
+      const first = app.sync.activeRunId!;
+      await app.sync.importFile(await file('real-time.lss'));
+      const second = app.sync.activeRunId!;
+      const finish = () => {
+        while (app.store.phase !== 'Ended') app.store.splitOrStart();
+        expect(app.store.attemptInProgress).toBe(false);
+      };
+      const historyOf = async (id: string) => {
+        const run = parseRun((await readDb((db) => db.getRun(id)))?.lss ?? '');
+        try {
+          return run.attemptHistoryLen();
+        } finally {
+          run[Symbol.dispose]();
+        }
+      };
+      const before = await historyOf(second);
+
+      finish();
+      expect(await app.sync.openRun(first)).toBeNull();
+      expect(app.sync.activeRunId).toBe(first);
+      expect(app.store.phase).toBe('NotRunning');
+      await settle();
+      expect(await historyOf(second)).toBe(before + 1);
+
+      finish();
+      expect(await app.sync.importFile(await file('game-time.lss'))).toBeNull();
+      finish();
+      expect(await app.sync.createRun('Game', '', ['A'])).toBeNull();
+      await settle();
+      expect(await historyOf(first)).toBe(1);
+      expect(app.sync.runs).toHaveLength(4);
+    });
+
+    it('deletes the current run after a finished attempt', async () => {
+      const app = await startApp();
+      await app.sync.createRun('Game', '', ['A']);
+      app.store.splitOrStart();
+      app.store.splitOrStart();
+      expect(app.store.phase).toBe('Ended');
+      expect(await app.sync.deleteRun(app.sync.activeRunId!)).toBeNull();
+      expect(app.store.hasRun).toBe(false);
+      await settle();
+      expect(await readDb((db) => db.listRuns())).toEqual([]);
+    });
+
+    it('reports a missing run when opening it', async () => {
+      const app = await startApp();
+      expect(await app.sync.openRun('nope')).toMatch(/no longer exist/);
+    });
+
+    it('deletes another run and keeps the current one', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const first = app.sync.activeRunId!;
+      await app.sync.importFile(await file('game-time.lss'));
+      const second = app.sync.activeRunId;
+      expect(await app.sync.deleteRun(first)).toBeNull();
+      expect(app.sync.runs.map((r) => r.id)).toEqual([second]);
+      expect(app.sync.activeRunId).toBe(second);
+      expect(app.store.hasRun).toBe(true);
+      expect(await readDb((db) => db.getRun(first))).toBeUndefined();
+    });
+
+    it('deletes the current run: unloads it and forgets it as the last run', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const id = app.sync.activeRunId!;
+      expect(await app.sync.deleteRun(id)).toBeNull();
+      expect(app.store.hasRun).toBe(false);
+      expect(app.store.view).toBeNull();
+      expect(app.sync.activeRunId).toBeNull();
+      expect(app.sync.runs).toEqual([]);
+      await settle();
+      expect((await readDb((db) => db.getSettings())).lastRunId).toBeNull();
+      // A reset without a run saves nothing (and doesn't throw).
+      app.store.reset();
+    });
+
+    it('refuses to delete the current run during an attempt', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const id = app.sync.activeRunId!;
+      app.store.splitOrStart();
+      expect(await app.sync.deleteRun(id)).toBe(ATTEMPT_IN_PROGRESS_MESSAGE);
+      expect(app.sync.runs).toHaveLength(1);
+    });
+
+    it('creates an empty run, loads and saves it', async () => {
+      const app = await startApp();
+      expect(await app.sync.createRun(' My Game ', 'Any%', ['One', 'Two', 'Three'])).toBeNull();
+      expect(app.store.hasRun).toBe(true);
+      const id = app.sync.activeRunId!;
+      expect(app.sync.runs).toMatchObject([{ id, name: 'My Game - Any%', game: 'My Game' }]);
+      const record = await readDb((db) => db.getRun(id));
+      const run = parseRun(record?.lss ?? '');
+      try {
+        expect(segmentNames(run)).toEqual(['One', 'Two', 'Three']);
+      } finally {
+        run[Symbol.dispose]();
+      }
+      await settle();
+      expect((await readDb((db) => db.getSettings())).lastRunId).toBe(id);
+    });
+
+    it('refuses an empty run without splits or during an attempt', async () => {
+      const app = await startApp();
+      expect(await app.sync.createRun('Game', '', [])).toMatch(/at least one/);
+      expect(app.store.hasRun).toBe(false);
+      await app.sync.createRun('Game', '', ['A']);
+      app.store.splitOrStart();
+      expect(await app.sync.createRun('Other', '', ['B'])).toBe(ATTEMPT_IN_PROGRESS_MESSAGE);
+      expect(app.sync.runs).toHaveLength(1);
+    });
+
+    it('exports the current run from the timer and others from the database', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const first = app.sync.activeRunId!;
+      const firstLss = app.store.exportLss()!;
+      await app.sync.importFile(await file('game-time.lss'));
+      const second = app.sync.activeRunId!;
+
+      expect(await app.sync.exportRun(first)).toEqual({
+        text: firstLss.text,
+        fileName: firstLss.fileName,
+      });
+      app.store.splitOrStart(); // the current state, incl. the running attempt
+      expect((await app.sync.exportRun(second))?.text).toBe(app.store.exportLss()?.text);
+      expect(app.sync.exportActiveRun()?.text).toBe(app.store.exportLss()?.text);
+      expect(await app.sync.exportRun('nope')).toBeNull();
+    });
+
+    it('has no saved runs without a database, but still creates runs in memory', async () => {
+      const app = await startApp({ failOpen: true });
+      expect(app.sync.available).toBe(false);
+      expect(await app.sync.createRun('Game', '', ['A'])).toBeNull();
+      expect(app.store.hasRun).toBe(true);
+      expect(app.sync.runs).toEqual([]);
+      expect(await app.sync.openRun('x')).toMatch(/not available/);
+    });
+
+    it('stores the attempt counts with every save', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('new-run.lss'));
+      const stats = () => {
+        const { attempts, completed } = app.sync.runs[0]!;
+        return { attempts, completed };
+      };
+      expect(stats()).toEqual({ attempts: 0, completed: 0 });
+
+      while (app.store.phase !== 'Ended') app.store.splitOrStart();
+      await settle();
+      expect(stats()).toEqual({ attempts: 1, completed: 1 }); // finished, not reset yet
+
+      app.store.reset();
+      await settle();
+      expect(stats()).toEqual({ attempts: 1, completed: 1 });
+
+      app.store.splitOrStart();
+      app.store.splitOrStart();
+      app.store.reset(); // reset before the end
+      await settle();
+      expect(stats()).toEqual({ attempts: 2, completed: 1 });
+      expect(await readDb((db) => db.getRun(app.sync.activeRunId!))).toMatchObject({
+        attempts: 2,
+        completed: 1,
+      });
+    });
+
+    it('fills in the counts of records saved without them, keeping the order', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('new-run.lss'));
+      while (app.store.phase !== 'Ended') app.store.splitOrStart();
+      app.store.reset();
+      await settle();
+      const id = app.sync.activeRunId!;
+      const { attempts: _a, completed: _c, ...old } = (await readDb((db) => db.getRun(id)))!;
+      await readDb((db) => db.putRun(old));
+
+      const again = await startApp();
+      expect(again.sync.runs[0]).toMatchObject({ id, attempts: 1, completed: 1 });
+      expect(await readDb((db) => db.getRun(id))).toMatchObject({
+        attempts: 1,
+        completed: 1,
+        updatedAt: old.updatedAt,
+      });
+    });
+  });
+
+  describe('import with duplicate check', () => {
+    /** The same file under another name, with the game in other case and extra spaces. */
+    const renamed = async (name: string, newName: string, edit: (text: string) => string) =>
+      new File([edit((await fixture(name)).toString('utf8'))], newName);
+
+    it('matches game and category ignoring case and spaces', () => {
+      const a = { game: 'Mario Kart 8', category: '150cc' };
+      expect(sameSplits(a, { game: ' mario kart 8 ', category: '150CC' })).toBe(true);
+      expect(sameSplits(a, { game: 'Mario Kart 8', category: '200cc' })).toBe(false);
+      expect(sameSplits({ game: '', category: '' }, { game: ' ', category: '' })).toBe(true);
+    });
+
+    it('prepares without changing anything and finds the duplicate', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const saved = app.sync.runs[0]!;
+      await app.sync.createRun('Other', '', ['A']);
+      const loaded = app.sync.activeRunId;
+
+      const prepared = await app.sync.prepareImport(
+        await renamed('real-time.lss', 'copy.lss', (text) =>
+          text.replace(
+            `<GameName>${saved.game}</GameName>`,
+            `<GameName> ${saved.game.toUpperCase()} </GameName>`,
+          ),
+        ),
+      );
+      if (typeof prepared === 'string') throw new Error(prepared);
+      expect(prepared.duplicate?.id).toBe(saved.id);
+      expect(prepared.fileName).toBe('copy.lss');
+      expect(app.sync.activeRunId).toBe(loaded);
+      expect(app.sync.runs).toHaveLength(2);
+
+      const fresh = await app.sync.prepareImport(await file('game-time.lss'));
+      expect(typeof fresh !== 'string' && fresh.duplicate).toBeNull();
+    });
+
+    it('replaces the saved entry with the file, or keeps both', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('new-run.lss'));
+      const id = app.sync.activeRunId!;
+      while (app.store.phase !== 'Ended') app.store.splitOrStart();
+      app.store.reset();
+      await app.sync.createRun('Other', '', ['A']);
+      await settle();
+      expect(app.sync.runs.find((r) => r.id === id)?.attempts).toBe(1);
+
+      // The original file (0 runs) over the saved splits (1 run).
+      const replace = await app.sync.prepareImport(await file('new-run.lss'));
+      if (typeof replace === 'string') throw new Error(replace);
+      expect(replace).toMatchObject({ attempts: 0, duplicate: { id, attempts: 1 } });
+      expect(await app.sync.commitImport(replace, 'replace')).toBeNull();
+      await settle();
+      expect(app.sync.activeRunId).toBe(id);
+      expect(app.sync.runs).toHaveLength(2);
+      expect(app.sync.runs.find((r) => r.id === id)?.attempts).toBe(0);
+      expect((await readDb((db) => db.getSettings())).lastRunId).toBe(id);
+
+      const both = await app.sync.prepareImport(await file('new-run.lss'));
+      if (typeof both === 'string') throw new Error(both);
+      expect(await app.sync.commitImport(both, 'new')).toBeNull();
+      expect(app.sync.runs).toHaveLength(3);
+      expect(app.sync.activeRunId).not.toBe(id);
+    });
+
+    it('refuses during an attempt, before and after preparing', async () => {
+      const app = await startApp();
+      await app.sync.importFile(await file('real-time.lss'));
+      const prepared = await app.sync.prepareImport(await file('real-time.lss'));
+      if (typeof prepared === 'string') throw new Error(prepared);
+      app.store.splitOrStart();
+      expect(await app.sync.prepareImport(await file('real-time.lss'))).toBe(
+        ATTEMPT_IN_PROGRESS_MESSAGE,
+      );
+      expect(await app.sync.commitImport(prepared, 'replace')).toBe(ATTEMPT_IN_PROGRESS_MESSAGE);
+      expect(app.store.phase).toBe('Running');
+    });
+
+    it('reports unreadable files when preparing', async () => {
+      const app = await startApp();
+      expect(await app.sync.prepareImport(await file('invalid.lss'))).toMatch(
+        /could not be read as a splits file/,
+      );
+    });
+
+    it('ImportFlow imports right away without a duplicate, else asks', async () => {
+      const app = await startApp();
+      const flow = new ImportFlow(app.sync);
+      await flow.start(await file('real-time.lss'));
+      expect(flow.pending).toBeNull();
+      expect(flow.error).toBeNull();
+      expect(app.sync.runs).toHaveLength(1);
+      const id = app.sync.activeRunId;
+
+      await flow.start(await file('real-time.lss'));
+      expect(flow.pending?.duplicate?.id).toBe(id);
+      await flow.choose('cancel');
+      expect(flow.pending).toBeNull();
+      expect(app.sync.runs).toHaveLength(1);
+
+      await flow.start(await file('real-time.lss'));
+      await flow.choose('new');
+      expect(app.sync.runs).toHaveLength(2);
+
+      await flow.start(await file('real-time.lss'));
+      await flow.choose('replace');
+      expect(flow.error).toBeNull();
+      expect(app.sync.runs).toHaveLength(2);
+
+      await flow.start(await file('invalid.lss'));
+      expect(flow.error).toMatch(/could not be read/);
+    });
   });
 });

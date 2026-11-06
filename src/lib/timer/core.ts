@@ -81,6 +81,25 @@ export function createTimer(run: Run): Timer {
   return timer;
 }
 
+/**
+ * A new run without times: game, category and one segment per name. Returns an owned
+ * `Run` (dispose it or hand it to `createTimer`). With no names it has no segments, so
+ * `createTimer` would refuse it.
+ */
+export function createRun(game: string, category: string, segmentNames: readonly string[]): Run {
+  const { Run, Segment } = core();
+  const run = Run.new();
+  try {
+    run.setGameName(game);
+    run.setCategoryName(category);
+    for (const name of segmentNames) run.pushSegment(Segment.new(name)); // consumes the segment
+  } catch (error) {
+    run[Symbol.dispose]();
+    throw error;
+  }
+  return run;
+}
+
 /** Saves the timer's run (incl. the current attempt state) as .lss text. */
 export function saveRunAsLss(timer: TimerRef): string {
   return timer.saveAsLss();
@@ -98,6 +117,26 @@ export function comparisonNames(run: RunRef): string[] {
   const names: string[] = [];
   for (let i = 0; i < run.comparisonsLen(); i++) names.push(run.comparison(i));
   return names;
+}
+
+export interface AttemptStats {
+  /** Attempts started with these splits (`attemptCount`, as the title shows it). */
+  attempts: number;
+  /** Attempts that reached the end: a final Real Time in the history (like the core's title). */
+  completed: number;
+}
+
+/**
+ * Attempt counts of the run. `currentEnded`: the timer's attempt just finished and isn't in
+ * the history yet (it is in a saved .lss), so it counts as completed.
+ */
+export function attemptStats(run: RunRef, currentEnded = false): AttemptStats {
+  let completed = currentEnded ? 1 : 0;
+  for (let i = 0; i < run.attemptHistoryLen(); i++) {
+    // `time()` uses the shared Time slot: read it out right away.
+    if (run.attemptHistoryIndex(i).time().realTime() !== null) completed++;
+  }
+  return { attempts: run.attemptCount(), completed };
 }
 
 /**

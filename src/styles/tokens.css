@@ -12,6 +12,7 @@
   --color-surface: #161616;
   --color-surface-alt: #232323;
   --color-border: #2e2e2e;
+  --color-backdrop: rgb(0 0 0 / 0.6);
   --color-current-split: #1f3f7a;
 
   /* text */

@@ -168,6 +168,6 @@ describe('helpers', () => {
   it('runDisplayName joins game and category', () => {
     expect(runDisplayName('Celeste', 'Any%')).toBe('Celeste - Any%');
     expect(runDisplayName(' Celeste ', '')).toBe('Celeste');
-    expect(runDisplayName('', '')).toBe('Untitled run');
+    expect(runDisplayName('', '')).toBe('Untitled splits');
   });
 });
