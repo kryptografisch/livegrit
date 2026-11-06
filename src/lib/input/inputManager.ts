@@ -5,7 +5,7 @@
 // native hotkey source). Only this manager calls the timer.
 //
 // `enabled` is true only on the Timer page; on the Settings page nothing reaches the timer
-// (step 8's capture mode reads the raw input itself).
+// (the key-binding capture mode reads the raw input itself).
 
 import {
   actionFor,

@@ -3,7 +3,7 @@
 A browser-only, installable (PWA) speedrun split timer that looks and behaves similar to LiveSplit.
 It's built with Svelte 5, TypeScript and Vite, and uses [livesplit-core](https://github.com/LiveSplit/livesplit-core), compiled to WebAssembly, for all timing and split logic.
 
-Status: prototype. See `plan.md` for the full spec, `open-todos.md` for the steps done so far and [docs/future-features.md](docs/future-features.md) for what's next.
+Status: prototype. See [docs/future-features.md](docs/future-features.md) for what's next.
 
 ## Prerequisites
 

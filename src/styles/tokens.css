@@ -1,7 +1,7 @@
 /*
  * Design tokens. All colors, fonts, sizes and spacing live here.
  * Components must use these variables only (no hard-coded colors), so the
- * final design (milestone 7) can be applied by swapping this file.
+ * final design can be applied by swapping this file.
  * Current values: dark LiveSplit-like placeholder.
  */
 :root {

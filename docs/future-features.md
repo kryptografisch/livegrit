@@ -1,13 +1,12 @@
 # Future features
 
-Things that are not part of the prototype (steps 1–13 in `open-todos.md`).
-Collected from `plan.md` and the "Notes / deviations" of the steps. Nothing here is planned in detail yet.
+Things that are not part of the prototype. Nothing here is planned in detail yet.
 
 ## Design
 
-- Design pass (plan.md milestone 7): apply the developer's design via `src/styles/tokens.css` and the components. Wait for the design; don't invent a final look.
+- Design pass: apply the developer's design via `src/styles/tokens.css` and the components. Wait for the design; don't invent a final look.
 
-## Hardening (plan.md milestone 8, §9)
+## Hardening
 
 - Manual matrix: Chrome, Firefox, Safari (desktop), Chrome Android; keyboard and one real gamepad (Xbox/PS style) mapped and used for a full run.
 - Behavioral checks:

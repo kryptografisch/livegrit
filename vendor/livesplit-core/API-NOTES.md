@@ -29,9 +29,9 @@ Read the value out (e.g. `.realTime()?.totalSeconds()`) **before** the next call
 ## Memory management (important)
 
 - Every owned class (`Run`, `Timer`, `Layout`, `LayoutState`, `ImageCache`, `TimeSpan`, `ParseRunResult`, components, ...) has **only `[Symbol.dispose]()`**. There is **no `.dispose()` method**.
-  - Free with `obj[Symbol.dispose]()` in `try/finally` (no `using`; see Decisions).
+  - Free with `obj[Symbol.dispose]()` in `try/finally` (no `using` declarations).
   - `Symbol.dispose` is ES2026 (explicit resource management). TypeScript needs `"ESNext.Disposable"` (or `"ESNext"`) in `compilerOptions.lib`.
-  - Runtime: browsers without `Symbol.dispose` evaluate the computed key as `"undefined"`, so the method is stored under the key `"undefined"`. `obj[Symbol.dispose]()` still finds it, but it's fragile. Step 3 should install `Symbol.dispose ??= Symbol.for('Symbol.dispose')` in a module that is imported **before** `livesplit-core`, because the class bodies are evaluated at import time.
+  - Runtime: browsers without `Symbol.dispose` evaluate the computed key as `"undefined"`, so the method is stored under the key `"undefined"`. `obj[Symbol.dispose]()` still finds it, but it's fragile. `src/lib/timer/disposePolyfill.ts` installs `Symbol.dispose ??= Symbol.for('Symbol.dispose')` and is imported **before** `livesplit-core`, because the class bodies are evaluated at import time.
 - Disposing twice is safe: dispose sets `ptr = 0`, and calls on a disposed object throw the string `"this is disposed"`.
 - Class tiers: `XRef` (read-only borrow) ⊂ `XRefMut` (mutable borrow) ⊂ `X` (owned, disposable). Only owned objects (`X`) are disposed. `XRef`/`XRefMut` returned by accessors (e.g. `timer.getRun()`, `run.segment(i)`, `timer.currentTime()`) are borrows: never dispose them, and don't keep them after the owner changes.
 - **Ownership moves**: these consume their argument and set its `ptr = 0`, so don't dispose it afterwards:
