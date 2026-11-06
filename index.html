@@ -3,15 +3,60 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LiveGrit</title>
-    <meta name="description" content="Speedrun split timer that runs in the browser and offline." />
+    <title>LiveGrit – speedrun split timer for the browser</title>
+    <meta
+      name="description"
+      content="Simple, opinionated speedrun split timer built as a PWA. Splits, golds and PBs with livesplit-core, .lss import and export, keyboard and gamepad controls, works offline."
+    />
+    <link rel="canonical" href="https://kryptografisch.github.io/livegrit/" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="kryptografisch" />
+
+    <!-- App names (home screen, task bar) -->
+    <meta name="application-name" content="LiveGrit" />
+    <meta name="apple-mobile-web-app-title" content="LiveGrit" />
+
+    <!-- Link previews (Discord, Mastodon, Slack, ...) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LiveGrit" />
+    <meta property="og:url" content="https://kryptografisch.github.io/livegrit/" />
+    <meta property="og:title" content="LiveGrit – speedrun split timer for the browser" />
+    <meta
+      property="og:description"
+      content="Simple, opinionated speedrun split timer built as a PWA. Runs in the browser, installs as an app, works offline."
+    />
+    <meta property="og:image" content="https://kryptografisch.github.io/livegrit/pwa-512x512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="LiveGrit logo" />
+    <meta name="twitter:card" content="summary" />
+
     <!-- Replaced with --color-surface from tokens.css by vite.config.ts. -->
     <meta name="theme-color" content="%THEME_COLOR%" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" sizes="180x180" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "LiveGrit",
+        "url": "https://kryptografisch.github.io/livegrit/",
+        "description": "Simple, opinionated speedrun split timer built as a PWA.",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Any (web browser)",
+        "browserRequirements": "Requires JavaScript and WebAssembly",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "kryptografisch" },
+        "license": "https://www.apache.org/licenses/LICENSE-2.0"
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>
+    <noscript>
+      LiveGrit is a speedrun split timer that runs in your browser. It needs JavaScript to work.
+    </noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

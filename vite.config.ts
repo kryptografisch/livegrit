@@ -39,7 +39,7 @@ export default defineConfig({
       manifest: {
         name: 'LiveGrit',
         short_name: 'LiveGrit',
-        description: 'Speedrun split timer that runs in the browser and offline.',
+        description: 'Simple, opinionated speedrun split timer built as a PWA. Works offline.',
         display: 'standalone',
         start_url: '.',
         scope: '.',
