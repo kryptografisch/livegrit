@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defaultBindings } from '../src/lib/input/bindings';
 import { GamepadSource, type PadSnapshot } from '../src/lib/input/gamepadSource';
-import { InputDeviceStore, padName } from '../src/lib/input/inputDevice.svelte';
+import { InputDeviceStore, padLabel, padName } from '../src/lib/input/inputDevice.svelte';
 import { InputManager, type ActionTarget } from '../src/lib/input/inputManager';
 import { handleKeyDown } from '../src/lib/input/keyboardSource';
 import { ManualTicker } from '../src/lib/ticker';
@@ -141,5 +141,31 @@ describe('InputDeviceStore', () => {
     expect(devices.pads).toEqual([
       { index: 2, id: PS, name: 'Wireless Controller', family: 'playstation' },
     ]);
+  });
+});
+
+describe('InputDeviceStore used pads', () => {
+  it('lists only pads whose press triggered an action, until they disconnect', () => {
+    const { devices, frame } = setup();
+    // Three pads connected; button 3 isn't mapped, button 0 is (split).
+    frame([pad(0, XBOX, [3]), pad(1, PS), pad(2, XBOX)]);
+    expect(devices.pads).toHaveLength(3);
+    expect(devices.usedPads).toEqual([]);
+
+    frame([pad(0, XBOX), pad(1, PS), pad(2, XBOX, [0])]);
+    frame([pad(0, XBOX), pad(1, PS), pad(2, XBOX)]);
+    expect(devices.usedPads.map((p) => p.index)).toEqual([2]);
+    frame([pad(0, XBOX), pad(1, PS, [0]), pad(2, XBOX)]);
+    expect(devices.usedPads.map((p) => p.index)).toEqual([1, 2]);
+
+    frame([pad(0, XBOX), pad(2, XBOX)]);
+    expect(devices.usedPads.map((p) => p.index)).toEqual([2]);
+  });
+});
+
+describe('padLabel', () => {
+  it('numbers pads by slot, from 1', () => {
+    expect(padLabel({ index: 0 })).toBe('Gamepad 1');
+    expect(padLabel({ index: 3 })).toBe('Gamepad 4');
   });
 });

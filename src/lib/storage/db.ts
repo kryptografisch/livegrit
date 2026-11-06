@@ -115,6 +115,19 @@ export class SplitterDb {
   async putSettings(settings: Settings): Promise<void> {
     await this.#db.put('settings', serializeSettings(settings), SETTINGS_KEY);
   }
+
+  /**
+   * Changes only the given fields (read, merge and write in one transaction), so windows
+   * with an older copy of the settings don't overwrite each other's changes. Pass values
+   * that aren't changed afterwards (e.g. a bindings copy).
+   */
+  async updateSettings(patch: Partial<Settings>): Promise<void> {
+    const changes = { ...patch };
+    const tx = this.#db.transaction('settings', 'readwrite');
+    const current = parseSettings(await tx.store.get(SETTINGS_KEY));
+    await tx.store.put(serializeSettings({ ...current, ...changes }), SETTINGS_KEY);
+    await tx.done;
+  }
 }
 
 /** A random id for a new run. `crypto.randomUUID` only exists in secure contexts. */

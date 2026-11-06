@@ -1,21 +1,12 @@
-// Minimal hash router: `#/` = Timer, `#/controls` = Controls, `#/data` = Data.
-// Hash routing needs no server config and works for an offline PWA.
+// Minimal hash router (routes in `routes.ts`). Hash routing needs no server config and
+// works for an offline PWA.
 
-export type Route = 'timer' | 'controls' | 'data';
+import { parseHash, type AppLocation } from './routes';
 
-const routes: Record<string, Route> = {
-  '': 'timer',
-  '/': 'timer',
-  '/controls': 'controls',
-  '/data': 'data',
-};
-
-function parse(hash: string): Route {
-  return routes[hash.replace(/^#/, '')] ?? 'timer';
-}
-
-export const router = $state({ route: parse(location.hash) });
+export const router = $state<AppLocation>(parseHash(location.hash));
 
 window.addEventListener('hashchange', () => {
-  router.route = parse(location.hash);
+  const next = parseHash(location.hash);
+  router.route = next.route;
+  router.section = next.section;
 });

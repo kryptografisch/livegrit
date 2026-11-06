@@ -29,8 +29,18 @@ export interface Settings {
   lastRunId: string | null;
   /** Whether persistent storage was already requested automatically (only asked once). */
   persistRequested: boolean;
-  /** The install bar above the nav was used once ("+ Install" clicked): never shown again. */
+  /** The Timer page install bar was used once ("+ Install" clicked): never shown again. */
   installBarDismissed: boolean;
+  /**
+   * The Timer page's window size (CSS pixels) the last time it was used, so the user can
+   * size the window the same again (OBS window capture). `null` = not known yet.
+   */
+  timerWindowSize: WindowSize | null;
+}
+
+export interface WindowSize {
+  width: number;
+  height: number;
 }
 
 export function defaultSettings(): Settings {
@@ -43,6 +53,7 @@ export function defaultSettings(): Settings {
     lastRunId: null,
     persistRequested: false,
     installBarDismissed: false,
+    timerWindowSize: null,
   };
 }
 
@@ -57,6 +68,7 @@ export interface StoredSettings {
   lastRunId: string | null;
   persistRequested: boolean;
   installBarDismissed: boolean;
+  timerWindowSize: WindowSize | null;
 }
 
 export function serializeSettings(settings: Settings): StoredSettings {
@@ -70,6 +82,9 @@ export function serializeSettings(settings: Settings): StoredSettings {
     lastRunId: settings.lastRunId,
     persistRequested: settings.persistRequested,
     installBarDismissed: settings.installBarDismissed,
+    timerWindowSize: settings.timerWindowSize
+      ? { width: settings.timerWindowSize.width, height: settings.timerWindowSize.height }
+      : null,
   };
 }
 
@@ -98,7 +113,17 @@ export function parseSettings(data: unknown): Settings {
   }
   if (data.persistRequested === true) out.persistRequested = true;
   if (data.installBarDismissed === true) out.installBarDismissed = true;
+  out.timerWindowSize = parseWindowSize(data.timerWindowSize);
   return out;
+}
+
+function parseWindowSize(data: unknown): WindowSize | null {
+  if (!isRecord(data)) return null;
+  const valid = (n: unknown): n is number =>
+    typeof n === 'number' && Number.isInteger(n) && n > 0 && n <= 100_000;
+  return valid(data.width) && valid(data.height)
+    ? { width: data.width, height: data.height }
+    : null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -5,7 +5,14 @@ import { ManualTicker } from '../src/lib/ticker';
 import { createRun, createTimer, initCore, segmentNames } from '../src/lib/timer/core';
 import { parseSegmentNames } from '../src/lib/timer/lss';
 import { TimerStore } from '../src/lib/timer/timerStore.svelte';
-import { formatAttempts, formatBytes, formatPercent, usagePercent } from '../src/lib/ui/format';
+import {
+  formatAttempts,
+  formatBytes,
+  formatClock,
+  formatDate,
+  formatPercent,
+  usagePercent,
+} from '../src/lib/ui/format';
 
 let wasm: Buffer;
 beforeAll(async () => {
@@ -91,5 +98,21 @@ describe('usage percent', () => {
     expect(formatPercent(0)).toBe('0%');
     expect(formatPercent(3.46)).toBe('3.5%');
     expect(formatPercent(42.4)).toBe('42%');
+  });
+});
+
+describe('date and clock formatting', () => {
+  // Local time, so the test doesn't depend on the machine's time zone.
+  const evening = new Date(2026, 10, 6, 18, 5).getTime();
+  const morning = new Date(2026, 10, 6, 7, 30).getTime();
+
+  it('shows the clock time in 24-hour format, also for 12-hour locales', () => {
+    expect(formatClock(evening, 'en-US')).toBe('18:05');
+    expect(formatClock(morning, 'en-US')).toBe('07:30');
+    expect(formatClock(evening, 'de-DE')).toBe('18:05');
+  });
+
+  it('shows the date without a time', () => {
+    expect(formatDate(evening, 'en-US')).toBe('Nov 6, 2026');
   });
 });

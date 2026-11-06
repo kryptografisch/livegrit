@@ -28,14 +28,15 @@ Status: early prototype. See `open-todos.md` for the step plan and `plan.md` for
 
 ```
 src/
-  main.ts, App.svelte      app entry + shell with hash router (#/ and #/controls)
+  main.ts, App.svelte      app entry + shell with hash router (#/ and #/settings)
   lib/
-    router.svelte.ts       hash router state
+    routes.ts, router.svelte.ts  hash routes + router state
+    sync/                  coordination between the app's windows (Timer + Settings)
     timer/                 livesplit-core wrapper, reactive timer store, .lss helpers
     input/                 actions, input manager, keyboard + gamepad sources, bindings
     storage/               IndexedDB + persistent storage
     ui/                    small presentational components
-  pages/                   TimerPage, ControlsPage
+  pages/                   TimerPage, SettingsPage (opens in its own window)
   styles/                  tokens.css (all design tokens), global.css
 tests/                     Vitest tests; fixtures/ holds our own generated .lss files
 vendor/                    built livesplit-core package (WASM + JS bindings)

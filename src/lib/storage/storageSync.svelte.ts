@@ -4,10 +4,18 @@
 // - saves the run's .lss on reset and when an attempt finishes (never per frame), and
 //   imported runs as new records,
 // - saves the settings whenever the user changes one,
-// - manages the saved runs for the Data page (list, open, create, delete, export),
-// - asks for persistent storage once, on the first user gesture.
+// - manages the saved runs for Settings → Data (list, open, create, delete, export),
+// - asks for persistent storage once, on the first user gesture,
+// - keeps several windows in step (`WindowLink`): after every save the other windows are
+//   told, and re-read the settings and the last run (`syncFromDb`).
 // Storage problems never stop the timer: it keeps working in memory and `error` says why.
+//
+// Several windows: each one has its own timer store and settings copy. Settings are
+// written field by field (`updateSettings`), so windows don't overwrite each other. Only
+// a Timer window runs attempts; while one runs (or is paused) there, the other windows
+// refuse to replace the splits (`attemptInProgress` includes the other windows).
 
+import { serializeBindings } from '../input/bindings';
 import type { InputManager } from '../input/inputManager';
 import { attemptStats, createRun, EmptyRunError, parseRun, type AttemptStats } from '../timer/core';
 import {
@@ -19,7 +27,19 @@ import {
 import type { StoreSetting, TimerStore } from '../timer/timerStore.svelte';
 import { newRunId, runDisplayName, SplitterDb, type RunRecord } from './db';
 import { onFirstUserGesture, persist, persisted } from './persist';
-import { defaultSettings, type Settings } from './settings';
+import { defaultSettings, type Settings, type WindowSize } from './settings';
+
+/** The link to the app's other windows (`WindowSync` in the browser). */
+export interface WindowLink {
+  /** Tells the other windows that settings or saved splits changed. */
+  notifyChanged(): void;
+  /** `listener` runs when another window changed something. Returns an unsubscribe. */
+  onChanged(listener: () => void): () => void;
+  /** An attempt is running or paused in another window (reactive). */
+  readonly remoteAttemptInProgress: boolean;
+  /** A finished attempt waits for its reset in another window (reactive). */
+  readonly remoteAttemptEnded: boolean;
+}
 
 /** UI settings outside the timer store (the Timer page's on-screen buttons). */
 export interface UiSettings {
@@ -44,6 +64,8 @@ export interface StorageSyncOptions {
   now?: () => number;
   /** Defaults to `navigator.storage` on the first pointer/key press. */
   persistence?: PersistRequester | null;
+  /** The other windows; `null`/missing = this window only. */
+  link?: WindowLink | null;
 }
 
 /** A saved run in the list (the record without its .lss text). */
@@ -94,8 +116,10 @@ export class StorageSync {
   available = $state(false);
   /** The saved runs, the most recently saved first. Updated after every change. */
   runs = $state.raw<RunSummary[]>([]);
-  /** "+ Install" in the bar above the nav was clicked once: the bar never shows again. */
+  /** "+ Install" in the Timer page install bar was clicked once: the bar never shows again. */
   installBarDismissed = $state(false);
+  /** The Timer window's size at its last use (`WindowSizeMemory`), `null` if unknown. */
+  timerWindowSize = $state.raw<WindowSize | null>(null);
 
   readonly #store: TimerStore;
   readonly #input: InputManager;
@@ -103,17 +127,23 @@ export class StorageSync {
   readonly #openDb: () => Promise<SplitterDb>;
   readonly #now: () => number;
   readonly #persistence: PersistRequester | null;
+  readonly #link: WindowLink | null;
 
   #db: SplitterDb | null = null;
   #settings: Settings = defaultSettings();
   #starting: Promise<void> | null = null;
-  /** While the stored preferences are applied to a run, store changes aren't saved. */
+  /** While stored values are applied (to a run, the bindings), changes aren't saved. */
   #applying = false;
+  /** `updatedAt` of the active run's record as this window loaded or saved it. */
+  #loadedAt: number | null = null;
+  #syncing: Promise<void> | null = null;
+  #syncAgain = false;
 
   constructor(options: StorageSyncOptions) {
     this.#store = options.store;
     this.#input = options.input;
     this.#ui = options.ui;
+    this.#link = options.link ?? null;
     const onVersionChange = () => {
       this.#db = null;
       this.available = false;
@@ -126,6 +156,19 @@ export class StorageSync {
   }
 
   /**
+   * True while an attempt is running or paused, here or in another window: the splits
+   * can't be replaced then. Reactive.
+   */
+  get attemptInProgress(): boolean {
+    return this.#store.attemptInProgress || (this.#link?.remoteAttemptInProgress ?? false);
+  }
+
+  /** A finished attempt waits for its reset, here or in another window. Reactive. */
+  get attemptEnded(): boolean {
+    return this.#store.phase === 'Ended' || (this.#link?.remoteAttemptEnded ?? false);
+  }
+
+  /**
    * Loads the core, opens the database, restores the settings and the last run, then
    * starts saving changes. Safe to call more than once. Rejects only if the core fails to
    * load (the Timer page shows that error itself).
@@ -133,6 +176,9 @@ export class StorageSync {
   start(): Promise<void> {
     this.#starting ??= this.#start().finally(() => {
       this.restored = true;
+      // Changes another window saved while this one was starting were not applied (the
+      // listener comes last, and syncs wait for `restored`): read once more.
+      if (this.#link) void this.syncFromDb();
     });
     return this.#starting;
   }
@@ -149,18 +195,11 @@ export class StorageSync {
       this.#fail('Saving is not available in this browser', error);
     }
 
-    const settings = this.#settings;
-    this.#input.bindings = settings.bindings;
-    if (settings.showButtons !== null) this.#ui.showButtons = settings.showButtons;
     // Clicked before the restore finished: keep it dismissed.
-    if (this.installBarDismissed) settings.installBarDismissed = true;
-    this.installBarDismissed = settings.installBarDismissed;
-    this.#applying = true;
-    try {
-      this.#store.visibleRows = settings.visibleRows;
-    } finally {
-      this.#applying = false;
+    if (this.installBarDismissed && !this.#settings.installBarDismissed) {
+      await this.#saveSettings({ installBarDismissed: true });
     }
+    this.#applySettings();
     await this.#restoreLastRun();
     await this.refreshRuns();
 
@@ -168,11 +207,31 @@ export class StorageSync {
     this.#store.onAttemptEnded = () => void this.saveRun();
     this.#store.onSettingsChange = (setting) => this.#storeSettingChanged(setting);
     this.#input.onBindingsChange((bindings) => {
-      this.#settings.bindings = bindings;
-      void this.#saveSettings();
+      if (this.#applying) return;
+      void this.#saveSettings({ bindings });
     });
+    this.#link?.onChanged(() => void this.syncFromDb());
 
     if (this.#db) this.#requestPersistence();
+  }
+
+  /** Applies the settings copy to the input, the UI and the store (nothing is saved). */
+  #applySettings(): void {
+    const settings = this.#settings;
+    this.#applying = true;
+    try {
+      // Unchanged bindings aren't set again (that would notify the bindings table).
+      const same =
+        JSON.stringify(serializeBindings(settings.bindings)) ===
+        JSON.stringify(serializeBindings(this.#input.bindings));
+      if (!same) this.#input.bindings = settings.bindings;
+      if (settings.showButtons !== null) this.#ui.showButtons = settings.showButtons;
+      this.installBarDismissed = settings.installBarDismissed;
+      this.timerWindowSize = settings.timerWindowSize;
+      this.#store.visibleRows = settings.visibleRows;
+    } finally {
+      this.#applying = false;
+    }
   }
 
   async #restoreLastRun(): Promise<void> {
@@ -182,18 +241,98 @@ export class StorageSync {
     try {
       const record = await this.#db.getRun(id);
       if (!record || this.#store.hasRun) {
-        if (!record) {
-          this.#settings.lastRunId = null;
-          await this.#saveSettings();
-        }
+        if (!record) await this.#saveSettings({ lastRunId: null });
         return;
       }
       this.#store.loadSplits(record.lss);
       this.activeRunId = id;
+      this.#loadedAt = record.updatedAt;
       this.#applyRunPreferences();
     } catch (error) {
       this.#fail('The last splits could not be restored', error);
     }
+  }
+
+  /**
+   * Another window changed settings or saved splits: re-reads the settings and applies
+   * them, loads the last run if it changed (never during an attempt here: that run stays)
+   * and refreshes the list. Calls while one runs are merged into one more pass.
+   */
+  syncFromDb(): Promise<void> {
+    if (this.#syncing) {
+      this.#syncAgain = true;
+      return this.#syncing;
+    }
+    this.#syncing = (async () => {
+      do {
+        this.#syncAgain = false;
+        await this.#sync();
+      } while (this.#syncAgain);
+    })().finally(() => {
+      this.#syncing = null;
+    });
+    return this.#syncing;
+  }
+
+  async #sync(): Promise<void> {
+    const db = this.#db;
+    // Before the restore finished: `start()` reads everything anyway.
+    if (!db || !this.restored) return;
+    try {
+      this.#settings = await db.getSettings();
+    } catch (error) {
+      this.#fail('The settings could not be read', error);
+      return;
+    }
+    this.#applySettings();
+    await this.#syncActiveRun(db);
+    // The comparison or timing method may have changed (also during an attempt).
+    if (this.#store.hasRun) this.#applyRunPreferences();
+    await this.refreshRuns();
+  }
+
+  /** Loads the last run (`lastRunId`) if another window changed or replaced it. */
+  async #syncActiveRun(db: SplitterDb): Promise<void> {
+    const store = this.#store;
+    if (store.attemptInProgress) return;
+    const target = this.#settings.lastRunId;
+    let record: RunRecord | undefined;
+    try {
+      record = target ? await db.getRun(target) : undefined;
+    } catch (error) {
+      this.#fail('The splits could not be read', error);
+      return;
+    }
+    // Checked again: an attempt may have started while the record was read.
+    if (store.attemptInProgress) return;
+    const upToDate = record
+      ? target === this.activeRunId && record.updatedAt === this.#loadedAt
+      : this.activeRunId === null || target === this.activeRunId;
+    if (upToDate) return;
+
+    if (store.phase === 'Ended' && target !== this.activeRunId) {
+      // Like loading other splits here: the finished attempt goes into its run's history
+      // first (the reset saves it), unless the other window deleted that run.
+      const old = this.activeRunId;
+      const exists = old ? (await db.getRun(old).catch(() => undefined)) !== undefined : false;
+      if (store.attemptInProgress) return;
+      if (!exists) this.activeRunId = null;
+      store.reset();
+    }
+    if (!record || !target) {
+      store.unloadRun();
+      this.activeRunId = null;
+      this.#loadedAt = null;
+      return;
+    }
+    try {
+      store.loadSplits(record.lss);
+    } catch (error) {
+      this.#fail('The splits from the other window could not be loaded', error);
+      return;
+    }
+    this.activeRunId = target;
+    this.#loadedAt = record.updatedAt;
   }
 
   /**
@@ -213,7 +352,7 @@ export class StorageSync {
    */
   async prepareImport(file: Blob & { readonly name?: string }): Promise<PreparedImport | string> {
     const fileName = file.name ?? '';
-    if (this.#store.attemptInProgress) return ATTEMPT_IN_PROGRESS_MESSAGE;
+    if (this.attemptInProgress) return ATTEMPT_IN_PROGRESS_MESSAGE;
     let bytes: Uint8Array;
     let info: { game: string; category: string } & AttemptStats;
     try {
@@ -251,8 +390,7 @@ export class StorageSync {
       return null;
     }
     this.activeRunId = target.id;
-    this.#settings.lastRunId = target.id;
-    await Promise.all([this.saveRun(), this.#saveSettings()]);
+    await Promise.all([this.saveRun(), this.#saveSettings({ lastRunId: target.id })]);
     return null;
   }
 
@@ -277,7 +415,7 @@ export class StorageSync {
 
   /** Loads a saved run. Returns `null` on success or a message for the user. */
   async openRun(id: string): Promise<string | null> {
-    if (this.#store.attemptInProgress) return ATTEMPT_IN_PROGRESS_MESSAGE;
+    if (this.attemptInProgress) return ATTEMPT_IN_PROGRESS_MESSAGE;
     if (id === this.activeRunId) return null;
     const db = this.#db;
     if (!db) return 'Saving is not available in this browser.';
@@ -301,8 +439,8 @@ export class StorageSync {
     }
     this.#applyRunPreferences();
     this.activeRunId = id;
-    this.#settings.lastRunId = id;
-    await this.#saveSettings();
+    this.#loadedAt = record.updatedAt;
+    await this.#saveSettings({ lastRunId: id });
     return null;
   }
 
@@ -312,7 +450,7 @@ export class StorageSync {
    */
   async deleteRun(id: string): Promise<string | null> {
     const active = id === this.activeRunId;
-    if (active && this.#store.attemptInProgress) return ATTEMPT_IN_PROGRESS_MESSAGE;
+    if (active && this.attemptInProgress) return ATTEMPT_IN_PROGRESS_MESSAGE;
     const db = this.#db;
     if (!db) return 'Saving is not available in this browser.';
     try {
@@ -324,10 +462,12 @@ export class StorageSync {
     if (active && id === this.activeRunId) {
       this.#store.unloadRun();
       this.activeRunId = null;
+      this.#loadedAt = null;
     }
     if (this.#settings.lastRunId === id) {
-      this.#settings.lastRunId = null;
-      await this.#saveSettings();
+      await this.#saveSettings({ lastRunId: null });
+    } else {
+      this.#link?.notifyChanged();
     }
     await this.refreshRuns();
     return null;
@@ -401,7 +541,7 @@ export class StorageSync {
    * false while an attempt is running or paused (nothing is changed then).
    */
   #finishAttempt(): boolean {
-    if (this.#store.attemptInProgress) return false;
+    if (this.attemptInProgress) return false;
     if (this.#store.phase === 'Ended') this.#store.reset();
     return true;
   }
@@ -410,8 +550,7 @@ export class StorageSync {
   async #activateNewRun(): Promise<void> {
     const id = newRunId();
     this.activeRunId = id;
-    this.#settings.lastRunId = id;
-    await Promise.all([this.saveRun(), this.#saveSettings()]);
+    await Promise.all([this.saveRun(), this.#saveSettings({ lastRunId: id })]);
   }
 
   /**
@@ -423,6 +562,9 @@ export class StorageSync {
     const lss = this.#store.exportLss();
     const db = this.#db;
     if (!id || !lss || !db) return;
+    const updatedAt = this.#now();
+    // Before the write: a sync meanwhile must not take this save for another window's.
+    if (id === this.activeRunId) this.#loadedAt = updatedAt;
     try {
       await db.putRun({
         id,
@@ -430,7 +572,7 @@ export class StorageSync {
         game: lss.game,
         category: lss.category,
         lss: lss.text,
-        updatedAt: this.#now(),
+        updatedAt,
         attempts: lss.attempts,
         completed: lss.completed,
       });
@@ -438,22 +580,21 @@ export class StorageSync {
       this.#fail('The splits could not be saved. Export them as .lss to keep them', error);
       return;
     }
+    this.#link?.notifyChanged();
     await this.refreshRuns();
   }
 
   /** Shows or hides the on-screen timer buttons and saves the choice. */
   setShowButtons(show: boolean): void {
     this.#ui.showButtons = show;
-    this.#settings.showButtons = show;
-    void this.#saveSettings();
+    void this.#saveSettings({ showButtons: show });
   }
 
-  /** Hides the install bar above the nav for good (the Data page keeps its own button). */
+  /** Hides the Timer page install bar for good (Settings → Data keeps its own button). */
   dismissInstallBar(): void {
     if (this.installBarDismissed) return;
     this.installBarDismissed = true;
-    this.#settings.installBarDismissed = true;
-    void this.#saveSettings();
+    void this.#saveSettings({ installBarDismissed: true });
   }
 
   /** Dismisses `error`. */
@@ -480,30 +621,42 @@ export class StorageSync {
   #storeSettingChanged(setting: StoreSetting): void {
     if (this.#applying) return;
     const store = this.#store;
-    const settings = this.#settings;
     switch (setting) {
       case 'comparison':
-        settings.comparison = store.comparison;
+        void this.#saveSettings({ comparison: store.comparison });
         break;
       case 'timingMethod':
-        settings.timingMethod = store.timingMethod;
+        void this.#saveSettings({ timingMethod: store.timingMethod });
         break;
       case 'visibleRows':
-        settings.visibleRows = store.visibleRows;
+        void this.#saveSettings({ visibleRows: store.visibleRows });
         break;
     }
-    void this.#saveSettings();
   }
 
-  async #saveSettings(): Promise<void> {
+  /** Remembers the Timer window's size (`WindowSizeMemory`). */
+  saveTimerWindowSize(size: WindowSize): void {
+    const current = this.timerWindowSize;
+    if (current?.width === size.width && current.height === size.height) return;
+    this.timerWindowSize = { width: size.width, height: size.height };
+    void this.#saveSettings({ timerWindowSize: this.timerWindowSize });
+  }
+
+  /**
+   * Updates the settings copy and writes only the changed fields, then tells the other
+   * windows. Never throws.
+   */
+  async #saveSettings(patch: Partial<Settings>): Promise<void> {
+    this.#settings = { ...this.#settings, ...patch };
     const db = this.#db;
     if (!db) return;
     try {
-      // Serialized synchronously by `putSettings`, so later changes don't leak into it.
-      await db.putSettings(this.#settings);
+      await db.updateSettings(patch);
     } catch (error) {
       this.#fail('The settings could not be saved', error);
+      return;
     }
+    this.#link?.notifyChanged();
   }
 
   /** Asks for persistent storage once ever (Firefox shows a prompt), on a user gesture. */
@@ -513,8 +666,7 @@ export class StorageSync {
     persistence.onFirstGesture(() => {
       void (async () => {
         if ((await persistence.persisted()) === true) return;
-        this.#settings.persistRequested = true;
-        await this.#saveSettings();
+        await this.#saveSettings({ persistRequested: true });
         await persistence.persist();
       })();
     });

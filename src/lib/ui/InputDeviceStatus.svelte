@@ -1,14 +1,18 @@
 <script lang="ts">
-  // Footer of the Timer page: the device last used for an action ("Keyboard" until a pad
-  // button triggers one, then the pad's name).
-  import type { InputDeviceStore } from '../input/inputDevice.svelte';
+  // Footer of the Timer page: "Keyboard + Gamepad 1 + …". Only controllers in use are
+  // listed: a pad appears once one of its presses triggered an action (a mapped button),
+  // since bindings don't belong to a device; other connected pads are left out. Its full
+  // name is in the tooltip.
+  import { padLabel, type InputDeviceStore } from '../input/inputDevice.svelte';
 
   let { devices }: { devices: InputDeviceStore } = $props();
-
-  const label = $derived(devices.lastUsed.kind === 'pad' ? devices.lastUsed.name : 'Keyboard');
 </script>
 
-<footer class="input-device">{label}</footer>
+<footer class="input-device">
+  Keyboard{#each devices.usedPads as pad (pad.index)}{' + '}<span title={pad.name}
+      >{padLabel(pad)}</span
+    >{/each}
+</footer>
 
 <style>
   .input-device {

@@ -20,7 +20,8 @@
   .run-header {
     position: relative;
     text-align: center;
-    padding: var(--space-2) var(--space-3);
+    /* Wider at the sides: the Timer page's gear sits in the top right corner. */
+    padding: var(--space-2) 2.25rem;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
   }

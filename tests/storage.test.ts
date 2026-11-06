@@ -94,8 +94,21 @@ describe('SplitterDb', () => {
     settings.lastRunId = 'abc';
     settings.persistRequested = true;
     settings.installBarDismissed = true;
+    settings.timerWindowSize = { width: 320, height: 480 };
     await db.putSettings(settings);
     expect(await db.getSettings()).toEqual(settings);
+  });
+
+  it('updates single settings fields, keeping the others', async () => {
+    const { db } = await freshDb();
+    await db.updateSettings({ visibleRows: 4 });
+    await db.updateSettings({ comparison: 'Best Segments', lastRunId: 'r1' });
+    await db.updateSettings({ lastRunId: null });
+    expect(await db.getSettings()).toEqual({
+      ...defaultSettings(),
+      visibleRows: 4,
+      comparison: 'Best Segments',
+    });
   });
 
   it('keeps data when reopened', async () => {
@@ -137,6 +150,7 @@ describe('parseSettings', () => {
       lastRunId: 42,
       persistRequested: 'true',
       installBarDismissed: 1,
+      timerWindowSize: { width: 0, height: 1.5 },
     });
     expect(parsed).toEqual(defaultSettings());
 
@@ -146,6 +160,14 @@ describe('parseSettings', () => {
       visibleRows: 5,
       comparison: 'Average Segments',
     });
+  });
+
+  it('reads the timer window size only when both sides are valid', () => {
+    const size = (timerWindowSize: unknown) => parseSettings({ timerWindowSize }).timerWindowSize;
+    expect(size({ width: 400, height: 600 })).toEqual({ width: 400, height: 600 });
+    expect(size({ width: 400 })).toBeNull();
+    expect(size({ width: -1, height: 600 })).toBeNull();
+    expect(size('400x600')).toBeNull();
   });
 
   it('reads what serializeSettings writes', () => {

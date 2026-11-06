@@ -202,7 +202,7 @@ export class GamepadSource implements InputSource {
   }
 
   /**
-   * Listens to all pad events, also while the manager is disabled (the Controls page's
+   * Listens to all pad events, also while the manager is disabled (the Settings page's
    * capture mode and live button view use this). Returns the unsubscribe function.
    */
   subscribe(listener: PadListener): () => void {

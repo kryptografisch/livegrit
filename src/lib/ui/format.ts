@@ -1,4 +1,4 @@
-// Small display formatters for the Data page.
+// Small display formatters for Settings (Splits, Data).
 
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
 
@@ -37,4 +37,18 @@ export function formatPercent(percent: number): string {
   if (percent < 0.01) return '< 0.01%';
   const digits = percent >= 10 ? 0 : percent >= 1 ? 1 : 2;
   return `${Number(percent.toFixed(digits))}%`;
+}
+
+/** A `Date.now()` value as a short local date ("Nov 6, 2026"). */
+export function formatDate(time: number, locale?: string): string {
+  return new Date(time).toLocaleDateString(locale, { dateStyle: 'medium' });
+}
+
+/** A `Date.now()` value as a local 24-hour clock time ("18:05"), in every locale. */
+export function formatClock(time: number, locale?: string): string {
+  return new Date(time).toLocaleTimeString(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
 }

@@ -1,17 +1,17 @@
 <script lang="ts">
-  // The install bar above the nav. Gone for good once "+ Install" was clicked (saved in the
-  // settings); the Data page keeps its own install button.
+  // The install bar at the top of the Timer page. Gone for good once "+ Install" was
+  // clicked (saved in the settings); Settings → Data keeps its own install button.
   import { router } from '../router.svelte';
   import { timerStore } from '../timer/timerStore.svelte';
   import { appStorage } from '../storage/appStorage';
   import { pwaInstall } from '../pwa/appPwa';
   import InstallButton from './InstallButton.svelte';
 
-  // Not on the Data page (it has its own install section), not before the settings are
-  // restored (no flash of a dismissed bar), not in the installed app and not during an
+  // Only on the Timer page (Settings has its own install section), not before the settings
+  // are restored (no flash of a dismissed bar), not in the installed app and not during an
   // attempt (no layout shift mid-run).
   const shown = $derived(
-    router.route !== 'data' &&
+    router.route === 'timer' &&
       appStorage.restored &&
       !appStorage.installBarDismissed &&
       !pwaInstall.installed &&

@@ -1,4 +1,4 @@
-// The input devices: connected gamepads (for the list on the Controls page) and the device
+// The input devices: connected gamepads (for the list in Settings → Controls) and the device
 // last used for an action (shown on the Timer page).
 //
 // There is no device selection: the keyboard and every pad work, and bindings don't depend
@@ -48,6 +48,11 @@ export function padName(id: string): string {
   return name === '' ? 'Gamepad' : name;
 }
 
+/** A pad's short label by slot, as in Settings → Controls: "Gamepad 1" for slot 0. */
+export function padLabel(pad: { index: number }): string {
+  return `Gamepad ${pad.index + 1}`;
+}
+
 const KEYBOARD: UsedDevice = { kind: 'keyboard' };
 
 export class InputDeviceStore {
@@ -55,6 +60,12 @@ export class InputDeviceStore {
   pads = $state<PadInfo[]>([]);
   /** The device whose input last triggered an action (keyboard until a pad is used). */
   lastUsed = $state<UsedDevice>(KEYBOARD);
+  /**
+   * Pads whose press triggered an action (a mapped button) since they connected, by slot.
+   * Bindings don't belong to a device, so this is how the Timer page footer tells the
+   * controllers in use from other connected ones.
+   */
+  usedPads = $state<PadInfo[]>([]);
 
   /**
    * Button names for device-independent lists (the bindings table): the last used pad's,
@@ -83,6 +94,7 @@ export class InputDeviceStore {
       return;
     }
     this.pads = this.pads.filter((p) => p.index !== event.index);
+    this.usedPads = this.usedPads.filter((p) => p.index !== event.index);
     // The last used pad is gone: back to the keyboard.
     if (this.lastUsed.kind === 'pad' && this.lastUsed.index === event.index) {
       this.lastUsed = KEYBOARD;
@@ -96,6 +108,10 @@ export class InputDeviceStore {
     }
     const pad = this.pads.find((p) => p.index === input.padIndex && p.id === input.padId);
     const info = pad ?? padInfo(input.padIndex, input.padId);
+    if (!this.usedPads.some((p) => p.index === info.index && p.id === info.id)) {
+      const others = this.usedPads.filter((p) => p.index !== info.index);
+      this.usedPads = [...others, info].sort((a, b) => a.index - b.index);
+    }
     const last = this.lastUsed;
     if (last.kind === 'pad' && last.index === info.index && last.id === info.id) return;
     this.lastUsed = { kind: 'pad', ...info };

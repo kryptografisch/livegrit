@@ -151,7 +151,7 @@ export function isBindableKey(code: string): boolean {
  * Keys: LiveSplit's numpad layout, plus Space (split), Backspace (undo) and P (pause).
  * No gamepad defaults on purpose: the game also receives every pad press, and games use
  * most buttons, so any default could trigger the timer by accident (a wrong default is
- * worse than none). The user binds pad buttons on the Controls page.
+ * worse than none). The user binds pad buttons in Settings → Controls.
  */
 const DEFAULTS: Bindings = {
   split: [key('Space'), key('Numpad1')],

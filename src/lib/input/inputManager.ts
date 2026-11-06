@@ -4,7 +4,7 @@
 // `dispatch`), or emit Actions directly (`dispatch`, e.g. the on-screen buttons or a future
 // native hotkey source). Only this manager calls the timer.
 //
-// `enabled` is true only on the Timer page; on the Controls page nothing reaches the timer
+// `enabled` is true only on the Timer page; on the Settings page nothing reaches the timer
 // (step 8's capture mode reads the raw input itself).
 
 import {

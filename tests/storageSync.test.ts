@@ -11,6 +11,7 @@ import {
   sameSplits,
   StorageSync,
   type PersistRequester,
+  type WindowLink,
 } from '../src/lib/storage/storageSync.svelte';
 import { ImportFlow } from '../src/lib/ui/importFlow.svelte';
 import { ManualTicker } from '../src/lib/ticker';
@@ -59,7 +60,15 @@ interface App {
 
 /** A fresh "page load" on the same database. */
 async function startApp(
-  options: { persisted?: boolean; failOpen?: boolean; now?: () => number } = {},
+  options: {
+    persisted?: boolean;
+    failOpen?: boolean;
+    now?: () => number;
+    /** Links this "window" with the others on the same hub. */
+    hub?: LinkHub;
+    /** Runs once, right after the start read the stored settings. */
+    afterSettingsRead?: () => Promise<void>;
+  } = {},
 ): Promise<App> {
   const store = new TimerStore({ ticker: new ManualTicker() });
   await store.init(wasm);
@@ -87,10 +96,25 @@ async function startApp(
     ui: app.ui,
     now: options.now,
     persistence,
+    link: options.hub?.link(store),
     openDb: async () => {
       if (options.failOpen) throw new Error('blocked');
-      app.db = await SplitterDb.open({ name: dbName });
-      return app.db;
+      const db = await SplitterDb.open({ name: dbName });
+      app.db = db;
+      const hook = options.afterSettingsRead;
+      if (hook) {
+        const read = db.getSettings.bind(db);
+        let first = true;
+        db.getSettings = async () => {
+          const settings = await read();
+          if (first) {
+            first = false;
+            await hook();
+          }
+          return settings;
+        };
+      }
+      return db;
     },
   });
   apps.push(app);
@@ -641,5 +665,207 @@ describe('StorageSync', () => {
       await flow.start(await file('invalid.lss'));
       expect(flow.error).toMatch(/could not be read/);
     });
+  });
+});
+
+/**
+ * Windows of one browser: "changed" goes to the other links (asynchronously, like a
+ * BroadcastChannel), the remote attempt state is read from the other windows' stores.
+ */
+class LinkHub {
+  readonly #links: { store: TimerStore; listeners: Set<() => void> }[] = [];
+
+  link(store: TimerStore): WindowLink {
+    const self = { store, listeners: new Set<() => void>() };
+    this.#links.push(self);
+    const others = () => this.#links.filter((l) => l !== self);
+    return {
+      notifyChanged: () => {
+        for (const other of others()) {
+          setTimeout(() => other.listeners.forEach((listener) => listener()), 0);
+        }
+      },
+      onChanged: (listener) => {
+        self.listeners.add(listener);
+        return () => self.listeners.delete(listener);
+      },
+      get remoteAttemptInProgress() {
+        return others().some((l) => l.store.attemptInProgress);
+      },
+      get remoteAttemptEnded() {
+        return others().some((l) => l.store.phase === 'Ended');
+      },
+    };
+  }
+}
+
+describe('StorageSync with several windows', () => {
+  /** A Timer window and a Settings window on the same database. */
+  async function twoWindows() {
+    const hub = new LinkHub();
+    const timer = await startApp({ hub });
+    const settings = await startApp({ hub });
+    return { timer, settings };
+  }
+
+  const historyOf = async (id: string) => {
+    const run = parseRun((await readDb((db) => db.getRun(id)))?.lss ?? '');
+    try {
+      return run.attemptHistoryLen();
+    } finally {
+      run[Symbol.dispose]();
+    }
+  };
+
+  it('applies settings changed in the other window', async () => {
+    const { timer, settings } = await twoWindows();
+    await settings.sync.importFile(await file('game-time.lss'));
+    await settle();
+    expect(timer.store.hasRun).toBe(true);
+
+    const bindings = withBinding(settings.input.bindings, 'split', padButton(3)).bindings;
+    settings.input.bindings = bindings;
+    settings.store.visibleRows = 3;
+    settings.sync.setShowButtons(false);
+    settings.store.setComparison('Best Segments');
+    settings.store.setTimingMethod('GameTime');
+    await settle();
+
+    expect(timer.input.bindings).toEqual(bindings);
+    expect(timer.store.visibleRows).toBe(3);
+    expect(timer.ui.showButtons).toBe(false);
+    expect(timer.store.comparison).toBe('Best Segments');
+    expect(timer.store.timingMethod).toBe('GameTime');
+  });
+
+  it('picks up splits loaded in the other window while this one was starting', async () => {
+    const hub = new LinkHub();
+    const timer = await startApp({ hub });
+    const lss = await file('new-run.lss');
+    // The Settings window has read the settings, but doesn't listen for changes yet.
+    const settings = await startApp({
+      hub,
+      afterSettingsRead: async () => {
+        await timer.sync.importFile(lss);
+        await settle(); // its "changed" is delivered (and missed) now
+      },
+    });
+    await settle();
+    expect(settings.sync.activeRunId).toBe(timer.sync.activeRunId);
+    expect(settings.store.hasRun).toBe(true);
+  });
+
+  it('does not lose changes of one window when the other one saves', async () => {
+    const { timer, settings } = await twoWindows();
+    settings.store.visibleRows = 5;
+    timer.sync.saveTimerWindowSize({ width: 320, height: 480 });
+    await settle();
+    const stored = await readDb((db) => db.getSettings());
+    expect(stored.visibleRows).toBe(5);
+    expect(stored.timerWindowSize).toEqual({ width: 320, height: 480 });
+    expect(settings.sync.timerWindowSize).toEqual({ width: 320, height: 480 });
+  });
+
+  it('loads, replaces and unloads the splits the other window chose', async () => {
+    const { timer, settings } = await twoWindows();
+    await settings.sync.importFile(await file('new-run.lss'));
+    const first = settings.sync.activeRunId!;
+    await settings.sync.importFile(await file('real-time.lss'));
+    const second = settings.sync.activeRunId!;
+    await settle();
+    expect(timer.sync.activeRunId).toBe(second);
+    expect(timer.store.exportLss()?.text).toBe(settings.store.exportLss()?.text);
+
+    expect(await settings.sync.openRun(first)).toBeNull();
+    await settle();
+    expect(timer.sync.activeRunId).toBe(first);
+
+    expect(await settings.sync.deleteRun(first)).toBeNull();
+    await settle();
+    expect(timer.store.hasRun).toBe(false);
+    expect(timer.sync.activeRunId).toBeNull();
+    expect(timer.sync.runs.map((r) => r.id)).toEqual([second]);
+  });
+
+  it('sees the runs the Timer window saved', async () => {
+    const { timer, settings } = await twoWindows();
+    await timer.sync.importFile(await file('new-run.lss'));
+    const id = timer.sync.activeRunId!;
+    await settle();
+    expect(settings.sync.activeRunId).toBe(id);
+    while (timer.store.phase !== 'Ended') timer.store.splitOrStart();
+    timer.store.reset();
+    await settle();
+    expect(settings.sync.runs[0]?.attempts).toBe(1);
+    expect(settings.store.exportLss()?.attempts).toBe(1);
+  });
+
+  it('refuses to replace the splits during an attempt in the Timer window', async () => {
+    const { timer, settings } = await twoWindows();
+    await settings.sync.importFile(await file('new-run.lss'));
+    const first = settings.sync.activeRunId!;
+    await settings.sync.importFile(await file('real-time.lss'));
+    const second = settings.sync.activeRunId!;
+    await settle();
+    timer.store.splitOrStart();
+    expect(settings.sync.attemptInProgress).toBe(true);
+    expect(await settings.sync.openRun(first)).toBe(ATTEMPT_IN_PROGRESS_MESSAGE);
+    expect(await settings.sync.importFile(await file('game-time.lss'))).toBe(
+      ATTEMPT_IN_PROGRESS_MESSAGE,
+    );
+    expect(await settings.sync.createRun('G', '', ['A'])).toBe(ATTEMPT_IN_PROGRESS_MESSAGE);
+    expect(await settings.sync.deleteRun(second)).toBe(ATTEMPT_IN_PROGRESS_MESSAGE);
+
+    // Settings still apply mid-run; the attempt keeps its splits.
+    settings.store.setComparison('Best Segments');
+    await settle();
+    expect(timer.store.comparison).toBe('Best Segments');
+    expect(timer.store.phase).toBe('Running');
+    expect(timer.sync.activeRunId).toBe(second);
+  });
+
+  it('keeps an attempt running when the other window changes the last run anyway', async () => {
+    const { timer, settings } = await twoWindows();
+    await settings.sync.importFile(await file('new-run.lss'));
+    await settle();
+    const id = timer.sync.activeRunId;
+    timer.store.splitOrStart();
+    // As if the other window didn't know about the attempt yet.
+    await readDb((db) => db.updateSettings({ lastRunId: null }));
+    await timer.sync.syncFromDb();
+    expect(timer.store.phase).toBe('Running');
+    expect(timer.sync.activeRunId).toBe(id);
+  });
+
+  it('saves a finished attempt in the Timer window before other splits are loaded', async () => {
+    const { timer, settings } = await twoWindows();
+    await settings.sync.importFile(await file('new-run.lss'));
+    const first = settings.sync.activeRunId!;
+    await settings.sync.importFile(await file('real-time.lss'));
+    const second = settings.sync.activeRunId!;
+    await settle();
+    const before = await historyOf(second);
+
+    while (timer.store.phase !== 'Ended') timer.store.splitOrStart();
+    await settle();
+    expect(settings.sync.attemptEnded).toBe(true);
+    expect(await settings.sync.openRun(first)).toBeNull();
+    await settle();
+    expect(timer.sync.activeRunId).toBe(first);
+    expect(timer.store.phase).toBe('NotRunning');
+    expect(await historyOf(second)).toBe(before + 1);
+  });
+
+  it('does not bring back splits deleted in the other window after a finished attempt', async () => {
+    const { timer, settings } = await twoWindows();
+    await settings.sync.importFile(await file('new-run.lss'));
+    const id = settings.sync.activeRunId!;
+    await settle();
+    while (timer.store.phase !== 'Ended') timer.store.splitOrStart();
+    await settle();
+    expect(await settings.sync.deleteRun(id)).toBeNull();
+    await settle();
+    expect(timer.store.hasRun).toBe(false);
+    expect(await readDb((db) => db.getRun(id))).toBeUndefined();
   });
 });

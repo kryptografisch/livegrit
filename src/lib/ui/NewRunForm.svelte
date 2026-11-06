@@ -4,17 +4,14 @@
   // closes again afterwards.
   import { runDisplayName } from '../storage/db';
   import type { StorageSync } from '../storage/storageSync.svelte';
-  import type { TimerStore } from '../timer/timerStore.svelte';
   import { parseSegmentNames } from '../timer/lss';
 
   let {
     storage,
-    store,
     open = $bindable(false),
     oncreated,
   }: {
     storage: StorageSync;
-    store: TimerStore;
     /** Whether the form is shown (bindable, so the page can lay out around it). */
     open?: boolean;
     /** Called with a status message after the splits were created (the form closes). */
@@ -29,7 +26,7 @@
   let gameInput: HTMLInputElement | undefined = $state();
 
   const names = $derived(parseSegmentNames(segments));
-  const attemptRunning = $derived(store.attemptInProgress);
+  const attemptRunning = $derived(storage.attemptInProgress);
 
   // Focus the first field when the form opens.
   $effect(() => {

@@ -1,4 +1,4 @@
-// Capture mode of the Controls page: turns the next key or pad button (combo) into a
+// Capture mode of Settings → Controls: turns the next key or pad button (combo) into a
 // binding. Pure (events / snapshots in, results out), the page wires it to the browser.
 
 import {
@@ -56,7 +56,7 @@ interface RecorderPad {
  * - the first button released without a second one → single (at the release: until then
  *   it could still become a hold combo).
  *
- * Detection goes on after a result (the Controls page test shows every one; capture mode
+ * Detection goes on after a result (the Settings page test shows every one; capture mode
  * stops at the first): while a combo's button stays held, it is the hold button for the
  * next press (hold RB, press A, press B → "Hold RB + A", then "Hold RB + B"), and its
  * release records nothing. Only two buttons count per binding; others are ignored.

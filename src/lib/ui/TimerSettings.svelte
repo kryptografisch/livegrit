@@ -1,45 +1,74 @@
 <script lang="ts">
-  // Comparison and timing method of the loaded run (moved here from the Timer page toolbar).
-  // The Controls page shows it only while a run is loaded.
+  // Settings → Timer: comparison and timing method (only while splits are loaded; the
+  // timing method only if they have Game Time), visible split rows and the on-screen timer
+  // buttons. Saved on change; other windows apply them right away.
+  import type { StorageSync } from '../storage/storageSync.svelte';
   import type { TimerStore } from '../timer/timerStore.svelte';
+  import { timerUi } from './timerUi.svelte';
 
-  let { store }: { store: TimerStore } = $props();
+  let { store, storage }: { store: TimerStore; storage: StorageSync } = $props();
 </script>
 
 <div class="fields">
+  {#if store.comparisons.length > 0}
+    <label class="field">
+      Compare against
+      <select value={store.comparison} onchange={(e) => store.setComparison(e.currentTarget.value)}>
+        {#each store.comparisons as name (name)}
+          <option value={name}>{name}</option>
+        {/each}
+      </select>
+    </label>
+
+    {#if store.hasGameTime}
+      <div class="field">
+        Timing method
+        <div class="toggle" role="group" aria-label="Timing method">
+          <button
+            type="button"
+            aria-pressed={store.timingMethod === 'RealTime'}
+            onclick={() => store.setTimingMethod('RealTime')}>Real Time</button
+          >
+          <button
+            type="button"
+            aria-pressed={store.timingMethod === 'GameTime'}
+            onclick={() => store.setTimingMethod('GameTime')}>Game Time</button
+          >
+        </div>
+      </div>
+    {/if}
+  {:else}
+    <p class="muted">Load splits (Splits tab) to choose the comparison.</p>
+  {/if}
+
   <label class="field">
-    Compare against
-    <select value={store.comparison} onchange={(e) => store.setComparison(e.currentTarget.value)}>
-      {#each store.comparisons as name (name)}
-        <option value={name}>{name}</option>
-      {/each}
-    </select>
+    Visible split rows
+    <input
+      class="rows"
+      type="number"
+      min="0"
+      max="99"
+      value={store.visibleRows}
+      onchange={(e) => (store.visibleRows = e.currentTarget.valueAsNumber)}
+    />
+    <span class="muted">0 = all</span>
   </label>
 
-  {#if store.hasGameTime}
-    <div class="field">
-      Timing method
-      <div class="toggle" role="group" aria-label="Timing method">
-        <button
-          type="button"
-          aria-pressed={store.timingMethod === 'RealTime'}
-          onclick={() => store.setTimingMethod('RealTime')}>Real Time</button
-        >
-        <button
-          type="button"
-          aria-pressed={store.timingMethod === 'GameTime'}
-          onclick={() => store.setTimingMethod('GameTime')}>Game Time</button
-        >
-      </div>
-    </div>
-  {/if}
+  <label class="field check">
+    <input
+      type="checkbox"
+      checked={timerUi.showButtons}
+      onchange={(e) => storage.setShowButtons(e.currentTarget.checked)}
+    />
+    On-screen timer buttons (for touch screens)
+  </label>
 </div>
 
 <style>
   .fields {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: var(--space-3);
   }
 
   .field {
@@ -50,8 +79,20 @@
     color: var(--color-text-muted);
   }
 
+  .check {
+    color: var(--color-text);
+    cursor: pointer;
+  }
+
+  .muted {
+    margin: 0;
+    font-size: 0.875em;
+    color: var(--color-text-muted);
+  }
+
   button,
-  select {
+  select,
+  .rows {
     padding: var(--space-2) var(--space-3);
     font: inherit;
     color: var(--color-text);
@@ -59,6 +100,12 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-1);
     cursor: pointer;
+  }
+
+  .rows {
+    width: 4.5rem;
+    padding: var(--space-1) var(--space-2);
+    cursor: text;
   }
 
   select {

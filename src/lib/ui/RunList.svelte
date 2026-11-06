@@ -5,10 +5,9 @@
   import { fade } from 'svelte/transition';
   import { downloadText } from '../timer/lss';
   import type { StorageSync } from '../storage/storageSync.svelte';
-  import type { TimerStore } from '../timer/timerStore.svelte';
   import { formatAttempts, formatDateTime } from './format';
 
-  let { storage, store }: { storage: StorageSync; store: TimerStore } = $props();
+  let { storage }: { storage: StorageSync } = $props();
 
   const NOTICE_MS = 4000;
 
@@ -18,7 +17,7 @@
   let message = $state<{ text: string; error: boolean } | null>(null);
   let busy = $state(false);
 
-  const attemptRunning = $derived(store.attemptInProgress);
+  const attemptRunning = $derived(storage.attemptInProgress);
 
   // Success notices (e.g. "deleted") disappear after a few seconds; errors stay.
   $effect(() => {
