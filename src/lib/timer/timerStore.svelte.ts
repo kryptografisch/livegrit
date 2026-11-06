@@ -4,7 +4,8 @@
 //
 // Rendering: `layout.updateStateAsJson` reuses the same LayoutState/ImageCache every frame,
 // so there are no per-frame wasm allocations. It only runs while an attempt is running or
-// after something changed (an action, a new run, scrolling); otherwise the state is static.
+// after something changed (an action, a new run, scrolling); otherwise the state is static
+// and the store isn't subscribed to the ticker at all (no per-frame work while idle).
 
 import type {
   ImageCache,
@@ -119,7 +120,6 @@ export class TimerStore {
       this.#layoutState = LayoutState.new();
       this.#imageCache = ImageCache.new();
       this.#ticker ??= rafTicker();
-      this.#unsubscribe = this.#ticker.subscribe(() => this.render());
       this.ready = true;
     })();
     return this.#initializing;
@@ -277,27 +277,32 @@ export class TimerStore {
     this.#invalidate();
   }
 
-  /** Updates `view` from the core if needed. Called by the ticker every frame. */
+  /**
+   * Updates `view` from the core if needed. Called by the ticker every frame while
+   * subscribed (running, or a change is waiting); unsubscribes once nothing is left to do.
+   */
   render(): void {
     const timer = this.#timer;
     const layout = this.#layout;
-    if (!timer || !layout || !this.#layoutState || !this.#imageCache) return;
-    if (!this.#dirty && this.phase !== 'Running') return;
-    this.#dirty = false;
-    const { Language } = core();
-    const json = layout.updateStateAsJson(
-      this.#layoutState,
-      this.#imageCache,
-      timer,
-      Language.English,
-    ) as LayoutStateJson;
-    this.view = toLayoutView(json);
+    if (timer && layout && this.#layoutState && this.#imageCache) {
+      if (this.#dirty || this.phase === 'Running') {
+        this.#dirty = false;
+        const { Language } = core();
+        const json = layout.updateStateAsJson(
+          this.#layoutState,
+          this.#imageCache,
+          timer,
+          Language.English,
+        ) as LayoutStateJson;
+        this.view = toLayoutView(json);
+      }
+    }
+    if (this.phase !== 'Running') this.#sleep();
   }
 
   /** Stops rendering and frees all wasm objects. */
   destroy(): void {
-    this.#unsubscribe?.();
-    this.#unsubscribe = null;
+    this.#sleep();
     this.#timer?.[Symbol.dispose]();
     this.#layout?.[Symbol.dispose]();
     this.#layoutState?.[Symbol.dispose]();
@@ -324,8 +329,21 @@ export class TimerStore {
     return ok;
   }
 
+  /** Renders on the next frame(s): subscribes to the ticker (once `init` has finished). */
+  #wake(): void {
+    // `#layout` rather than `ready`: no reactive read (this may run inside an effect).
+    if (this.#unsubscribe || !this.#layout || !this.#ticker) return;
+    this.#unsubscribe = this.#ticker.subscribe(() => this.render());
+  }
+
+  #sleep(): void {
+    this.#unsubscribe?.();
+    this.#unsubscribe = null;
+  }
+
   #invalidate(): void {
     this.#dirty = true;
+    this.#wake();
     const timer = this.#timer;
     if (!timer) return;
     this.phase = phases[timer.currentPhase()] ?? 'NotRunning';

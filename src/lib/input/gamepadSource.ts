@@ -1,9 +1,11 @@
 // Gamepad input source with edge detection.
 //
 // The Gamepad API has no button events, so the pads are polled once per frame from the
-// shared ticker (it runs whenever the page is visible, not only while the timer runs).
-// `gamepadconnected` / `gamepaddisconnected` trigger an extra poll so connects show up at
-// once.
+// shared ticker (whenever the page is visible, not only while the timer runs), but only
+// while at least one pad is known: without pads nothing is polled per frame (no CPU, no
+// garbage). Browsers announce a new pad with `gamepadconnected` (on its first button
+// press); that and `gamepaddisconnected` trigger a poll, which starts or stops the
+// per-frame polling.
 //
 // The logic lives in `GamepadTracker`, which is pure: snapshots + time in, events out. It
 // detects rising edges (pressed now, not pressed in the last snapshot) per pad and button,
@@ -64,6 +66,11 @@ export class GamepadTracker {
   constructor(debounceMs = PAD_DEBOUNCE_MS, chordWindowMs = CHORD_WINDOW_MS) {
     this.#debounceMs = debounceMs;
     this.#chordWindowMs = chordWindowMs;
+  }
+
+  /** Whether the last snapshot had any pad. */
+  get hasPads(): boolean {
+    return this.#pads.size > 0;
   }
 
   /** The pads of the last snapshot, by index. */
@@ -190,6 +197,11 @@ export class GamepadSource implements InputSource {
   readonly #tracker: GamepadTracker;
   readonly #listeners = new Set<PadListener>();
   #manager: InputManager | null = null;
+  /** Set while connected. */
+  #ticker: Ticker | null = null;
+  /** Set while polling every frame (connected and at least one pad known). */
+  #stopTicking: (() => void) | null = null;
+  readonly #onTick = () => this.poll();
 
   constructor(options: GamepadSourceOptions = {}) {
     this.#options = options;
@@ -212,15 +224,15 @@ export class GamepadSource implements InputSource {
 
   connect(manager: InputManager): () => void {
     this.#manager = manager;
-    const ticker = this.#options.ticker ?? rafTicker();
+    this.#ticker = this.#options.ticker ?? rafTicker();
     const target = this.#options.eventTarget ?? window;
     const poll = () => this.poll();
-    const unsubscribe = ticker.subscribe(poll);
     target.addEventListener('gamepadconnected', poll);
     target.addEventListener('gamepaddisconnected', poll);
-    poll();
+    poll(); // pads the page already sees (starts the per-frame polling if there are any)
     return () => {
-      unsubscribe();
+      this.#ticker = null;
+      this.#syncTicking();
       target.removeEventListener('gamepadconnected', poll);
       target.removeEventListener('gamepaddisconnected', poll);
       this.#manager = null;
@@ -232,8 +244,16 @@ export class GamepadSource implements InputSource {
     };
   }
 
-  /** Reads the pads once and handles the changes. Called every frame while connected. */
+  /**
+   * Reads the pads once and handles the changes. Called every frame while connected and a
+   * pad is known, and on `gamepadconnected` / `gamepaddisconnected`.
+   */
   poll(): void {
+    this.#handle();
+    this.#syncTicking();
+  }
+
+  #handle(): void {
     const read = this.#options.getGamepads ?? (() => readGamepads(globalThis.navigator));
     const now = (this.#options.now ?? (() => performance.now()))();
     for (const event of this.#tracker.update(read(), now)) {
@@ -250,6 +270,18 @@ export class GamepadSource implements InputSource {
         together: event.together,
       });
       if (action) this.#manager.dispatch(action, 'gamepad');
+    }
+  }
+
+  /** Polls every frame exactly while connected and a pad is known. */
+  #syncTicking(): void {
+    const ticker = this.#ticker;
+    const wanted = ticker !== null && this.#tracker.hasPads;
+    if (wanted && !this.#stopTicking) {
+      this.#stopTicking = ticker.subscribe(this.#onTick);
+    } else if (!wanted && this.#stopTicking) {
+      this.#stopTicking();
+      this.#stopTicking = null;
     }
   }
 

@@ -30,9 +30,10 @@ function setup() {
   bindings.split.push({ kind: 'pad', combo: 'single', buttonIndex: 0 });
   manager.bindings = bindings;
   const ticker = new ManualTicker();
+  const win = new EventTarget();
   const source = new GamepadSource({
     ticker,
-    eventTarget: new EventTarget(),
+    eventTarget: win,
     getGamepads: () => pads,
     now: () => now,
   });
@@ -40,9 +41,12 @@ function setup() {
   devices.attachPads(source);
   devices.attachInput(manager);
   manager.addSource(source);
+  /** Sets the pads and runs one frame (announcing new pads like a browser does). */
   const frame = (next: PadSnapshot[]) => {
+    const appeared = next.some((p) => !pads.some((q) => q.index === p.index && q.id === p.id));
     pads = next;
     now += 100;
+    if (appeared) win.dispatchEvent(new Event('gamepadconnected'));
     ticker.tick(100);
   };
   const key = (code: string) => {

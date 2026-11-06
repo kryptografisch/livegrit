@@ -92,6 +92,32 @@ describe('timer store', () => {
     expect(store.hasRun).toBe(true);
     expect(store.phase).toBe('NotRunning');
     expect(store.view?.timer?.color).toBe('NotRunning');
+    // Nothing changes while idle: no per-frame work.
+    expect(ticker.listenerCount).toBe(0);
+  });
+
+  it('only listens to the ticker while running or a change is waiting', () => {
+    store.splitOrStart();
+    expect(ticker.listenerCount).toBe(1);
+    ticker.tick();
+    ticker.tick();
+    expect(ticker.listenerCount).toBe(1);
+
+    store.togglePause();
+    expect(store.phase).toBe('Paused');
+    expect(ticker.listenerCount).toBe(1); // renders the paused state once more
+    ticker.tick();
+    expect(store.view?.timer?.color).toBe('Paused');
+    expect(ticker.listenerCount).toBe(0);
+
+    store.scrollSplits('down');
+    expect(ticker.listenerCount).toBe(1);
+    ticker.tick();
+    expect(ticker.listenerCount).toBe(0);
+
+    store.togglePause();
+    expect(ticker.listenerCount).toBe(1);
+    ticker.tick();
     expect(ticker.listenerCount).toBe(1);
   });
 

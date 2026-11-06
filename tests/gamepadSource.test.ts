@@ -191,10 +191,12 @@ describe('GamepadSource', () => {
       debounceMs: 50,
     });
     manager.addSource(source);
-    /** Sets the pads and runs one frame. */
+    /** Sets the pads and runs one frame (announcing new pads like a browser does). */
     const frame = (next: PadSnapshot[], ms = 100) => {
+      const appeared = next.some((p) => !pads.some((q) => q.index === p.index && q.id === p.id));
       pads = next;
       now += ms;
+      if (appeared) win.dispatchEvent(new Event('gamepadconnected'));
       ticker.tick(ms);
     };
     return {
@@ -288,6 +290,39 @@ describe('GamepadSource', () => {
     setPads([]);
     win.dispatchEvent(new Event('gamepaddisconnected'));
     expect(events.map((e) => e.type)).toEqual(['connected', 'disconnected']);
+  });
+
+  it('only polls every frame while a pad is known', () => {
+    const { ticker, win, setPads } = setup();
+    expect(ticker.listenerCount).toBe(0); // no pads: nothing per frame
+    setPads([pad()]);
+    ticker.tick(); // not announced yet: still nothing
+    expect(ticker.listenerCount).toBe(0);
+    win.dispatchEvent(new Event('gamepadconnected'));
+    expect(ticker.listenerCount).toBe(1);
+    setPads([]);
+    ticker.tick(); // the per-frame poll notices the pad is gone
+    expect(ticker.listenerCount).toBe(0);
+  });
+
+  it('polls every frame at once when a pad is already visible on connect', () => {
+    const ticker = new ManualTicker();
+    const manager = new InputManager({
+      splitOrStart: vi.fn(),
+      undo: vi.fn(),
+      skip: vi.fn(),
+      togglePause: vi.fn(),
+      reset: vi.fn(),
+    });
+    const source = new GamepadSource({
+      ticker,
+      eventTarget: new EventTarget(),
+      getGamepads: () => [pad()],
+    });
+    manager.addSource(source);
+    expect(ticker.listenerCount).toBe(1);
+    manager.removeSource(source);
+    expect(ticker.listenerCount).toBe(0);
   });
 
   it('isolates listener errors', () => {
