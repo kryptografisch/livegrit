@@ -1,31 +1,30 @@
 <script lang="ts">
-  // Temporary on-screen controls (step 4). Step 6 hides them behind a toggle (kept for touch).
+  // On-screen controls, mainly for touch. Hidden by default on keyboard/mouse devices
+  // (toggle in the run toolbar). They dispatch through the input manager like every other
+  // source, so a button click and a key press within the de-dupe window fire once.
   import type { TimerStore } from '../timer/timerStore.svelte';
+  import type { InputManager } from '../input/inputManager';
+  import type { Action } from '../input/types';
 
-  let { store }: { store: TimerStore } = $props();
+  let { store, input }: { store: TimerStore; input: InputManager } = $props();
 
   const splitLabel = $derived(store.phase === 'NotRunning' ? 'Start' : 'Split');
+
+  function press(action: Action, event: MouseEvent & { currentTarget: HTMLButtonElement }) {
+    input.dispatch(action, 'pointer');
+    // Don't keep focus: a focused button would otherwise react to Space/Enter as well.
+    event.currentTarget.blur();
+  }
 </script>
 
 <div class="timer-buttons">
-  <button type="button" class="primary" onclick={() => store.splitOrStart()}>{splitLabel}</button>
-  <button type="button" onclick={() => store.undo()}>Undo</button>
-  <button type="button" onclick={() => store.skip()}>Skip</button>
-  <button type="button" onclick={() => store.togglePause()}>
+  <button type="button" class="primary" onclick={(e) => press('split', e)}>{splitLabel}</button>
+  <button type="button" onclick={(e) => press('undo', e)}>Undo</button>
+  <button type="button" onclick={(e) => press('skip', e)}>Skip</button>
+  <button type="button" onclick={(e) => press('pause', e)}>
     {store.phase === 'Paused' ? 'Resume' : 'Pause'}
   </button>
-  <button type="button" onclick={() => store.reset()}>Reset</button>
-  <label class="rows">
-    Rows
-    <input
-      type="number"
-      min="0"
-      max="99"
-      value={store.visibleRows}
-      onchange={(e) => (store.visibleRows = e.currentTarget.valueAsNumber)}
-      title="Visible split rows (0 = all)"
-    />
-  </label>
+  <button type="button" onclick={(e) => press('reset', e)}>Reset</button>
 </div>
 
 <style>
@@ -51,22 +50,5 @@
 
   button.primary {
     border-color: var(--color-text-muted);
-  }
-
-  .rows {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    color: var(--color-text-muted);
-  }
-
-  .rows input {
-    width: 3.5rem;
-    font: inherit;
-    color: var(--color-text);
-    background: var(--color-surface-alt);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-1);
-    padding: var(--space-1);
   }
 </style>

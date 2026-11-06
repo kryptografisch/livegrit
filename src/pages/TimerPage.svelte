@@ -9,6 +9,8 @@
   import TimerButtons from '../lib/ui/TimerButtons.svelte';
   import RunToolbar from '../lib/ui/RunToolbar.svelte';
   import ImportButton from '../lib/ui/ImportButton.svelte';
+  import { timerUi } from '../lib/ui/timerUi.svelte';
+  import { inputManager } from '../lib/input/appInput';
 
   let loadError = $state<string | null>(null);
   let importError = $state<string | null>(null);
@@ -88,7 +90,9 @@
     {#if view.info.length > 0}
       <InfoList info={view.info} />
     {/if}
-    <TimerButtons store={timerStore} />
+    {#if timerUi.showButtons}
+      <TimerButtons store={timerStore} input={inputManager} />
+    {/if}
     <RunToolbar store={timerStore} onimport={importFile} />
   {:else}
     <div class="empty">

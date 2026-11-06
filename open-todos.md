@@ -173,15 +173,24 @@ Notes / deviations:
 
 ## Step 6: Input layer + keyboard
 
-- [ ] `input/types.ts` (`Action`), `bindings.ts` (model: per action, a list of `{kind:'key', code}` / `{kind:'pad', buttonIndex, padId?, label}`; defaults; serialize/parse with versioning).
-- [ ] `inputManager.ts`: registers sources and dispatches Actions to the timer store; a de-dupe window so the same Action from two sources within ~50 ms fires once; enabled only on the Timer page (Controls page capture mode takes over).
-- [ ] `keyboardSource.ts`: `keydown` on window, `event.code`, ignore `repeat` and editable targets, `preventDefault` only for bound keys on the Timer page.
-- [ ] Remove/hide the on-screen buttons behind a small toggle (keep them for touch).
-- [ ] Vitest: bindings serialization, de-dupe, keyboard filtering.
+- [x] `input/types.ts` (`Action`), `bindings.ts` (model: per action, a list of `{kind:'key', code}` / `{kind:'pad', buttonIndex, padId?, label}`; defaults; serialize/parse with versioning).
+- [x] `inputManager.ts`: registers sources and dispatches Actions to the timer store; a de-dupe window so the same Action from two sources within ~50 ms fires once; enabled only on the Timer page (Controls page capture mode takes over).
+- [x] `keyboardSource.ts`: `keydown` on window, `event.code`, ignore `repeat` and editable targets, `preventDefault` only for bound keys on the Timer page.
+- [x] Remove/hide the on-screen buttons behind a small toggle (keep them for touch).
+- [x] Vitest: bindings serialization, de-dupe, keyboard filtering.
 
 **Commit:** `feat(input): input manager and keyboard source`
 
 Notes / deviations:
+
+- Done, except the manual browser checks (keys on the Timer page, Space not scrolling / not clicking a focused button, nothing firing on the Controls page, button toggle on touch): for the developer.
+- `bindings.ts`: `KeyBinding {kind:'key', code}`, `PadBinding {kind:'pad', buttonIndex, padId?, label}`, `Bindings = Record<Action, Binding[]>`. Defaults (keyboard only, LiveSplit numpad + extras): split `Space`/`Numpad1`, undo `Backspace`/`Numpad8`, skip `Numpad2`, pause `KeyP`/`Numpad5`, reset `Numpad3`. No pad defaults (step 7/8 can add some). `serializeBindings` → `{version: 1, bindings}`; `parseBindings(objectOrJson)` never throws: bad data / other version → defaults, invalid entries and duplicates dropped, a missing action gets its defaults, an empty list stays empty (cleared by the user). `actionFor(bindings, rawInput)`: first action in `ACTIONS` order wins on conflicts; pad matching is already in: exact `padId` (or a binding without `padId`) first, else the same button index on another pad id (step 7 can refine it).
+- `inputManager.ts`: `InputManager(target: ActionTarget)` (`TimerStore` fits), `InputSource { connect(manager): disconnect }`, `addSource`/`removeSource`, `resolve(rawInput)` (bindings lookup, `null` while disabled), `dispatch(action, source)` (returns false when disabled or de-duped). De-dupe: the same Action within 50 ms fires once **from any source** (also two keys for the same action, or key + on-screen button). Target errors are logged, not thrown. `enabled` is set in `App.svelte` from the route (`timer` only). Injected clock for tests.
+- `keyboardSource.ts`: pure `isEditableTarget` (text-like inputs, textarea, select, contenteditable; not buttons/checkboxes/radios) and `isTimerKeyCandidate` (also skips Ctrl/Alt/Meta combos so browser shortcuts keep working, IME composition, empty codes) plus `handleKeyDown`. Bound keys: `preventDefault` also on repeats (holding Space doesn't scroll), but repeats don't dispatch. Extra: the keyup of a handled key is cancelled too, so Space on a focused toolbar button doesn't click it as well.
+- `appInput.ts` (new): the app singletons `inputManager` (on `timerStore`) and `keyboardSource` (window); App connects the keyboard source in an `$effect`.
+- On-screen buttons: now dispatch through the manager (source `pointer`, so they're de-duped with keys) and blur after the click. Shown by default only on touch screens (`(pointer: coarse)`), toggle "Show/Hide buttons" in the run toolbar; state in `ui/timerUi.svelte.ts` (kept across pages, **not persisted** yet: step 9). The temporary Rows input moved from `TimerButtons` into `RunToolbar` (removed in step 12). The comparison select and Rows input blur after a change, otherwise the focused field would swallow the timer keys.
+- Extra: the Controls page shows the default controls as a read-only list (action → keys), using new `ACTION_LABELS`, `keyLabel(code)` ("KeyP" → "P", "Numpad1" → "Numpad 1") and `bindingLabel` in `bindings.ts`. Step 8 replaces it with the editable table.
+- Tests: `tests/bindings.test.ts`, `tests/inputManager.test.ts`, `tests/keyboardSource.test.ts` (fake events on an `EventTarget`, node env). `check` 0/0, `test` 56/56, `build` OK.
 
 ---
 

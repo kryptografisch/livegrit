@@ -1,9 +1,11 @@
 <script lang="ts">
   // Temporary (step 5): import/export, comparison and timing method on the Timer page.
   // Step 8 moves the comparison + timing method selectors to Controls, step 10 import/export.
+  // Rows input and the on-screen buttons toggle: step 6 (Rows is removed in step 12).
   import type { TimerStore } from '../timer/timerStore.svelte';
   import { downloadText } from '../timer/lss';
   import ImportButton from './ImportButton.svelte';
+  import { timerUi } from './timerUi.svelte';
 
   let { store, onimport }: { store: TimerStore; onimport: (file: File) => void } = $props();
 
@@ -23,7 +25,11 @@
     Compare
     <select
       value={store.comparison}
-      onchange={(e) => store.setComparison(e.currentTarget.value)}
+      onchange={(e) => {
+        store.setComparison(e.currentTarget.value);
+        // A focused select swallows the timer keys; give them back.
+        e.currentTarget.blur();
+      }}
       title="Comparison"
     >
       {#each store.comparisons as name (name)}
@@ -46,6 +52,32 @@
       >
     </div>
   {/if}
+
+  <label class="field">
+    Rows
+    <input
+      class="rows"
+      type="number"
+      min="0"
+      max="99"
+      value={store.visibleRows}
+      onchange={(e) => {
+        store.visibleRows = e.currentTarget.valueAsNumber;
+        e.currentTarget.blur();
+      }}
+      title="Visible split rows (0 = all)"
+    />
+  </label>
+
+  <button
+    type="button"
+    class="buttons-toggle"
+    aria-pressed={timerUi.showButtons}
+    onclick={() => (timerUi.showButtons = !timerUi.showButtons)}
+    title="Show or hide the on-screen timer buttons"
+  >
+    {timerUi.showButtons ? 'Hide buttons' : 'Show buttons'}
+  </button>
 </div>
 
 <style>
@@ -73,6 +105,23 @@
   select {
     min-width: 0;
     max-width: 14rem;
+  }
+
+  .rows {
+    width: 3.5rem;
+    font: inherit;
+    color: var(--color-text);
+    background: var(--color-surface-alt);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-1);
+    padding: var(--space-1);
+  }
+
+  .buttons-toggle {
+    margin-left: auto;
+    padding: var(--space-1) var(--space-2);
+    font-size: 0.875em;
+    color: var(--color-text-muted);
   }
 
   .field {
