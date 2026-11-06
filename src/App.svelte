@@ -4,7 +4,7 @@
   import ControlsPage from './pages/ControlsPage.svelte';
   import { timerStore } from './lib/timer/timerStore.svelte';
   import { wakeLock } from './lib/wakeLock';
-  import { inputManager, keyboardSource } from './lib/input/appInput';
+  import { gamepadSource, inputManager, keyboardSource } from './lib/input/appInput';
 
   // Timer keys only act on the Timer page; the Controls page captures input for bindings.
   $effect(() => {
@@ -13,7 +13,11 @@
 
   $effect(() => {
     inputManager.addSource(keyboardSource);
-    return () => inputManager.removeSource(keyboardSource);
+    inputManager.addSource(gamepadSource);
+    return () => {
+      inputManager.removeSource(keyboardSource);
+      inputManager.removeSource(gamepadSource);
+    };
   });
 
   // Keep the screen awake while an attempt is running, on every page. Released on pause,

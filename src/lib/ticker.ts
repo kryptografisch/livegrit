@@ -1,5 +1,5 @@
 // Shared requestAnimationFrame ticker. The timer store renders from it, and the gamepad
-// source (step 7) will poll from it too, so there is only one rAF loop in the app.
+// source polls from it too, so there is only one rAF loop in the app.
 // The loop stops while the document is hidden (rAF is throttled/paused there anyway) and
 // starts again when it becomes visible.
 

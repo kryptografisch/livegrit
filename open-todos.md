@@ -196,13 +196,22 @@ Notes / deviations:
 
 ## Step 7: Gamepad source
 
-- [ ] `gamepadSource.ts`: polled from the rAF loop (shared ticker; it must keep polling even when the timer isn't running), rising-edge detection per pad/button, per-button debounce, connect/disconnect events, padId matching that tolerates id changes (fall back to button index).
-- [ ] Make the core logic pure (snapshot in → events out) so it can be tested without a browser.
-- [ ] Vitest: edge detection and debounce with fake snapshots; disconnect mid-press.
+- [x] `gamepadSource.ts`: polled from the rAF loop (shared ticker; it must keep polling even when the timer isn't running), rising-edge detection per pad/button, per-button debounce, connect/disconnect events, padId matching that tolerates id changes (fall back to button index).
+- [x] Make the core logic pure (snapshot in → events out) so it can be tested without a browser.
+- [x] Vitest: edge detection and debounce with fake snapshots; disconnect mid-press.
 
 **Commit:** `feat(input): gamepad source with edge detection`
 
 Notes / deviations:
+
+- Done, except the manual check with a real pad (bind a button: only possible from step 8 on, or temporarily in code): for the developer.
+- `GamepadTracker` (pure): `update(snapshots: PadSnapshot[], now) → PadEvent[]` (`connected` / `disconnected` / `press {index, id, buttonIndex}`; disconnects first, then connects, then presses), `pads` getter (current button states, sorted by index), `reset()`. `PadSnapshot = {index, id, buttons: boolean[]}` (`pressed` only, no analog threshold). Pads are tracked by `Gamepad.index`; another id in the same slot = disconnect + connect.
+- Debounce: `PAD_DEBOUNCE_MS = 50`, per pad + button (a second rising edge of the same button within 50 ms is dropped; other buttons are not affected). Debounce times survive a disconnect, so a pad dropping out and returning within 50 ms with the button held doesn't fire twice.
+- A button already held when a pad first appears **counts as a press**: browsers hide pads until a button is pressed, so that press reveals the pad and may be the run start. Disconnect mid-press: no phantom press, no stuck state; the next real press after reconnect works.
+- `readGamepads(navigator)`: skips null slots and `connected: false` pads, never throws (missing API, permissions policy `SecurityError`).
+- `GamepadSource` (`InputSource`): on `connect` it subscribes to the shared ticker (the timer store keeps the ticker subscribed permanently, so polling runs whenever the page is visible, timer running or not) and polls once more on `gamepadconnected` / `gamepaddisconnected`. Presses go through `manager.resolve({kind:'pad', buttonIndex, padId})` → `dispatch(action, 'gamepad')`, so id-change tolerance is the existing `actionFor` fallback (same button index on another pad id). Extra for step 8: `subscribe(listener)` gets all pad events also while the manager is disabled (capture mode), `pads` gives live button state. Disconnecting the source unsubscribes and forgets the pads. Injected ticker, `getGamepads`, event target and clock for tests.
+- Wired up in `appInput.ts` (`gamepadSource`) and `App.svelte` (added next to the keyboard source). Still no default pad bindings (step 8 adds the capture UI).
+- Tests: `tests/gamepadSource.test.ts` (tracker edges, multi-pad, reveal press, debounce, per-button debounce, disconnect mid-press, quick drop-out, slot swap; `readGamepads`; source with `ManualTicker`: dispatch, id-change fallback, disabled manager, connect events, listener errors, disconnect). `check` 0/0, `test` 73/73, `build` OK.
 
 ---
 
