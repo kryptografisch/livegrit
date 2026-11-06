@@ -1,8 +1,25 @@
 {
   "name": "live-grit",
-  "private": true,
+  "version": "1.0.0",
+  "description": "simple, opinionated speedrun split timer built as a PWA",
+  "author": "kryptografisch",
   "license": "Apache-2.0",
-  "version": "0.0.1",
+  "private": true,
+  "homepage": "https://kryptografisch.github.io/livegrit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kryptografisch/live-grit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kryptografisch/live-grit/issues"
+  },
+  "keywords": [
+    "speedrun",
+    "split-timer",
+    "livesplit",
+    "pwa",
+    "svelte"
+  ],
   "type": "module",
   "engines": {
     "node": ">=24"
