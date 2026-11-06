@@ -10,7 +10,8 @@
   import RunToolbar from '../lib/ui/RunToolbar.svelte';
   import ImportButton from '../lib/ui/ImportButton.svelte';
   import { timerUi } from '../lib/ui/timerUi.svelte';
-  import { inputManager } from '../lib/input/appInput';
+  import InputDeviceStatus from '../lib/ui/InputDeviceStatus.svelte';
+  import { inputDevices, inputManager } from '../lib/input/appInput';
 
   let loadError = $state<string | null>(null);
   let importError = $state<string | null>(null);
@@ -107,6 +108,8 @@
       {/if}
     </div>
   {/if}
+
+  <InputDeviceStatus devices={inputDevices} />
 
   {#if dragDepth > 0}
     <div class="drop-overlay" aria-hidden="true">

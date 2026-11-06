@@ -3,6 +3,7 @@
   // run management + storage status.
   import { ACTIONS } from '../lib/input/types';
   import { ACTION_LABELS, bindingLabel, defaultBindings } from '../lib/input/bindings';
+  import { inputDevices } from '../lib/input/appInput';
 
   const defaults = defaultBindings();
 </script>
@@ -10,6 +11,15 @@
 <section class="controls-page">
   <h1>Controls</h1>
   <p class="warning">Keyboard and gamepad input only work while this tab/window is focused.</p>
+
+  <h2>Available devices</h2>
+  <ul class="devices">
+    <li>Keyboard</li>
+    {#each inputDevices.pads as pad (pad.index)}
+      <li>{pad.name} <span class="slot">(gamepad {pad.index + 1})</span></li>
+    {/each}
+  </ul>
+  <p class="hint">Press a button on your controller to detect it.</p>
 
   <h2>Default controls</h2>
   <dl class="bindings">
@@ -44,6 +54,21 @@
 
   .warning {
     color: var(--color-warning);
+  }
+
+  .devices {
+    margin: 0;
+    padding-left: var(--space-4);
+  }
+
+  .slot {
+    color: var(--color-text-muted);
+  }
+
+  .hint {
+    margin: var(--space-2) 0 0;
+    font-size: 0.875em;
+    color: var(--color-text-muted);
   }
 
   .bindings {

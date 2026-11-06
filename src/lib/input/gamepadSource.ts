@@ -186,8 +186,12 @@ export class GamepadSource implements InputSource {
       unsubscribe();
       target.removeEventListener('gamepadconnected', poll);
       target.removeEventListener('gamepaddisconnected', poll);
-      this.#tracker.reset();
       this.#manager = null;
+      // Listeners (e.g. the device list) must not keep pads that are no longer tracked.
+      for (const { index, id } of this.#tracker.pads) {
+        this.#emit({ type: 'disconnected', index, id });
+      }
+      this.#tracker.reset();
     };
   }
 
@@ -196,20 +200,27 @@ export class GamepadSource implements InputSource {
     const read = this.#options.getGamepads ?? (() => readGamepads(globalThis.navigator));
     const now = (this.#options.now ?? (() => performance.now()))();
     for (const event of this.#tracker.update(read(), now)) {
-      for (const listener of this.#listeners) {
-        try {
-          listener(event);
-        } catch (error) {
-          console.error('[gamepad] listener failed', error);
-        }
-      }
+      // Listeners first: the device store may switch the active pad on `connected`, so the
+      // press that revealed the pad already counts.
+      this.#emit(event);
       if (event.type !== 'press' || !this.#manager) continue;
       const action = this.#manager.resolve({
         kind: 'pad',
         buttonIndex: event.buttonIndex,
         padId: event.id,
+        padIndex: event.index,
       });
       if (action) this.#manager.dispatch(action, 'gamepad');
+    }
+  }
+
+  #emit(event: PadEvent): void {
+    for (const listener of this.#listeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        console.error('[gamepad] listener failed', error);
+      }
     }
   }
 }

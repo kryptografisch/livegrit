@@ -39,6 +39,8 @@ export interface InputManagerOptions {
   dedupeWindowMs?: number;
 }
 
+export type InputListener = (input: RawInput, action: Action) => void;
+
 export class InputManager {
   enabled = true;
 
@@ -48,6 +50,7 @@ export class InputManager {
   #bindings: Bindings = defaultBindings();
   readonly #lastFired = new Map<Action, number>();
   readonly #disconnects = new Map<InputSource, () => void>();
+  readonly #inputListeners = new Set<InputListener>();
 
   constructor(target: ActionTarget, options: InputManagerOptions = {}) {
     this.#target = target;
@@ -75,9 +78,32 @@ export class InputManager {
     this.#disconnects.delete(source);
   }
 
-  /** The Action bound to `input` while enabled, else `null`. Doesn't fire it. */
+  /**
+   * Listens to raw input that resolved to an Action (e.g. to show the last used device).
+   * Returns the unsubscribe function.
+   */
+  onInput(listener: InputListener): () => void {
+    this.#inputListeners.add(listener);
+    return () => this.#inputListeners.delete(listener);
+  }
+
+  /**
+   * The Action bound to `input` while enabled, else `null`. Any keyboard and any pad work:
+   * bindings don't depend on the device. Doesn't fire the action.
+   */
   resolve(input: RawInput): Action | null {
-    return this.enabled ? actionFor(this.#bindings, input) : null;
+    if (!this.enabled) return null;
+    const action = actionFor(this.#bindings, input);
+    if (action) {
+      for (const listener of this.#inputListeners) {
+        try {
+          listener(input, action);
+        } catch (error) {
+          console.error('[input] input listener failed', error);
+        }
+      }
+    }
+    return action;
   }
 
   /**

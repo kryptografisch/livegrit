@@ -1,8 +1,9 @@
 // Binding model, defaults and (versioned) serialization.
 //
 // Every Action has a list of bindings (several keys and/or pad buttons). Keys are stored by
-// `KeyboardEvent.code` (layout-independent). Pad buttons store the raw button index, plus
-// optionally the pad id they were captured on and a human-readable label.
+// `KeyboardEvent.code` (layout-independent). Pad buttons store the raw button index plus a
+// human-readable label. Which pad they apply to is not part of the binding: only the one
+// pad selected as input device is used (see `inputDevice.svelte.ts`).
 
 import { ACTIONS, type Action } from './types';
 
@@ -15,9 +16,7 @@ export interface KeyBinding {
 export interface PadBinding {
   kind: 'pad';
   buttonIndex: number;
-  /** `Gamepad.id` it was captured on; without it any pad matches. */
-  padId?: string;
-  /** Shown in the UI, e.g. "Button 0". */
+  /** Shown in the UI, e.g. "A" or "Button 17". */
   label: string;
 }
 
@@ -27,13 +26,49 @@ export type Bindings = Record<Action, Binding[]>;
 
 /** Raw input from a source, matched against the bindings. */
 export type RawInput =
-  { kind: 'key'; code: string } | { kind: 'pad'; buttonIndex: number; padId: string };
+  | { kind: 'key'; code: string }
+  | { kind: 'pad'; buttonIndex: number; padId: string; padIndex: number };
 
 export const BINDINGS_VERSION = 1;
 
 const key = (code: string): KeyBinding => ({ kind: 'key', code });
 
-/** LiveSplit's numpad layout, plus Space (split), Backspace (undo) and P (pause). */
+/**
+ * Button names of the W3C "standard" gamepad mapping (Xbox name / PlayStation name), which
+ * browsers use for most common pads. Other pads have other layouts: the raw index is what
+ * counts, the name is only a hint.
+ */
+const STANDARD_BUTTONS = [
+  'A / Cross',
+  'B / Circle',
+  'X / Square',
+  'Y / Triangle',
+  'LB / L1',
+  'RB / R1',
+  'LT / L2',
+  'RT / R2',
+  'Back / Select',
+  'Start',
+  'Left stick',
+  'Right stick',
+  'D-pad up',
+  'D-pad down',
+  'D-pad left',
+  'D-pad right',
+  'Home',
+];
+
+/** A readable name for a pad button index (standard mapping, else "Button N"). */
+export function padButtonLabel(buttonIndex: number): string {
+  return STANDARD_BUTTONS[buttonIndex] ?? `Button ${buttonIndex}`;
+}
+
+/**
+ * Keys: LiveSplit's numpad layout, plus Space (split), Backspace (undo) and P (pause).
+ * No gamepad defaults on purpose: the game also receives every pad press, and games use
+ * most buttons, so any default could trigger the timer by accident (a wrong default is
+ * worse than none). The user binds pad buttons on the Controls page.
+ */
 const DEFAULTS: Bindings = {
   split: [key('Space'), key('Numpad1')],
   undo: [key('Backspace'), key('Numpad8')],
@@ -55,9 +90,7 @@ export function cloneBindings(bindings: Bindings): Bindings {
 
 /** Stable identity of a binding (ignores the label). */
 export function bindingId(binding: Binding): string {
-  return binding.kind === 'key'
-    ? `key:${binding.code}`
-    : `pad:${binding.buttonIndex}:${binding.padId ?? ''}`;
+  return binding.kind === 'key' ? `key:${binding.code}` : `pad:${binding.buttonIndex}`;
 }
 
 export function sameBinding(a: Binding, b: Binding): boolean {
@@ -91,26 +124,15 @@ export function bindingLabel(binding: Binding): string {
 
 /**
  * The action bound to `input`, or `null`. If two actions share a binding, the first in
- * `ACTIONS` order wins. Pad buttons: a binding for exactly this pad (or for any pad) wins;
- * if none, a binding with the same button index on another pad id matches too, so a pad
- * whose id string changed (other browser/OS/driver) keeps working.
+ * `ACTIONS` order wins. Pad buttons match by button index only; whether the pad is the
+ * selected one is the input manager's job.
  */
 export function actionFor(bindings: Bindings, input: RawInput): Action | null {
-  if (input.kind === 'key') {
-    for (const action of ACTIONS) {
-      if (bindings[action].some((b) => b.kind === 'key' && b.code === input.code)) return action;
-    }
-    return null;
-  }
-  let fallback: Action | null = null;
-  for (const action of ACTIONS) {
-    for (const b of bindings[action]) {
-      if (b.kind !== 'pad' || b.buttonIndex !== input.buttonIndex) continue;
-      if (b.padId === undefined || b.padId === input.padId) return action;
-      fallback ??= action;
-    }
-  }
-  return fallback;
+  const matches = (b: Binding) =>
+    input.kind === 'key'
+      ? b.kind === 'key' && b.code === input.code
+      : b.kind === 'pad' && b.buttonIndex === input.buttonIndex;
+  return ACTIONS.find((action) => bindings[action].some(matches)) ?? null;
 }
 
 interface StoredBindings {
@@ -165,17 +187,15 @@ function parseBinding(entry: unknown): Binding | null {
     return typeof entry.code === 'string' && entry.code !== '' ? key(entry.code) : null;
   }
   if (entry.kind === 'pad') {
-    const { buttonIndex, padId, label } = entry;
+    const { buttonIndex, label } = entry;
     if (typeof buttonIndex !== 'number' || !Number.isInteger(buttonIndex) || buttonIndex < 0) {
       return null;
     }
-    const binding: PadBinding = {
+    return {
       kind: 'pad',
       buttonIndex,
-      label: typeof label === 'string' && label !== '' ? label : `Button ${buttonIndex}`,
+      label: typeof label === 'string' && label !== '' ? label : padButtonLabel(buttonIndex),
     };
-    if (typeof padId === 'string' && padId !== '') binding.padId = padId;
-    return binding;
   }
   return null;
 }

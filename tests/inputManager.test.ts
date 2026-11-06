@@ -85,4 +85,30 @@ describe('input manager', () => {
     manager.removeSource(source);
     expect(disconnect).toHaveBeenCalledOnce();
   });
+
+  it('reports resolved input to onInput listeners (only bound input, only while enabled)', () => {
+    const { manager } = setup();
+    const bindings = defaultBindings();
+    bindings.split.push({ kind: 'pad', buttonIndex: 0, label: 'A' });
+    manager.bindings = bindings;
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const seen = vi.fn();
+    manager.onInput(() => {
+      throw new Error('boom');
+    });
+    const off = manager.onInput(seen);
+    const pad = { kind: 'pad', buttonIndex: 0, padId: 'Pad', padIndex: 1 } as const;
+    expect(manager.resolve(pad)).toBe('split');
+    expect(seen).toHaveBeenCalledWith(pad, 'split');
+    manager.resolve({ kind: 'key', code: 'KeyQ' });
+    manager.enabled = false;
+    manager.resolve({ kind: 'key', code: 'Space' });
+    expect(seen).toHaveBeenCalledOnce();
+    manager.enabled = true;
+    off();
+    manager.resolve({ kind: 'key', code: 'Space' });
+    expect(seen).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
 });

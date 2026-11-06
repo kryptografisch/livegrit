@@ -154,8 +154,9 @@ describe('GamepadSource', () => {
       reset: vi.fn(),
     };
     const manager = new InputManager(target, { now: () => now });
+    // No pad defaults: button 0 splits, button 1 undoes.
     const bindings = defaultBindings();
-    bindings.split.push({ kind: 'pad', buttonIndex: 0, padId: ID, label: 'A' });
+    bindings.split.push({ kind: 'pad', buttonIndex: 0, label: 'A' });
     bindings.undo.push({ kind: 'pad', buttonIndex: 1, label: 'B' });
     manager.bindings = bindings;
     const ticker = new ManualTicker();
@@ -198,11 +199,13 @@ describe('GamepadSource', () => {
     expect(target.skip).not.toHaveBeenCalled();
   });
 
-  it('matches by button index when the pad id changed', () => {
+  it('works with any pad (bindings are independent of the device)', () => {
     const { target, frame } = setup();
-    frame([pad([], 0, 'Same pad, other browser')]);
-    frame([pad([0], 0, 'Same pad, other browser')]);
+    frame([pad([], 0, 'Other pad'), pad([], 1)]);
+    frame([pad([0], 0, 'Other pad'), pad([], 1)]);
     expect(target.splitOrStart).toHaveBeenCalledTimes(1);
+    frame([pad([], 0, 'Other pad'), pad([1], 1)]);
+    expect(target.undo).toHaveBeenCalledTimes(1);
   });
 
   it('keeps tracking but fires nothing while the manager is disabled', () => {
@@ -245,12 +248,15 @@ describe('GamepadSource', () => {
     error.mockRestore();
   });
 
-  it('stops polling and forgets pads on disconnect', () => {
+  it('stops polling and forgets pads (reported as disconnected) on disconnect', () => {
     const { manager, source, ticker, frame } = setup();
+    const events: PadEvent[] = [];
+    source.subscribe((e) => events.push(e));
     frame([pad([0])]);
     expect(source.pads).toHaveLength(1);
     manager.removeSource(source);
     expect(ticker.listenerCount).toBe(0);
     expect(source.pads).toEqual([]);
+    expect(events.at(-1)).toEqual({ type: 'disconnected', index: 0, id: ID });
   });
 });

@@ -4,6 +4,7 @@ import {
   actionFor,
   bindingLabel,
   keyLabel,
+  padButtonLabel,
   defaultBindings,
   parseBindings,
   serializeBindings,
@@ -12,9 +13,9 @@ import {
 
 function withPads(): Bindings {
   const b = defaultBindings();
-  b.split.push({ kind: 'pad', buttonIndex: 0, padId: 'Xbox Pad', label: 'A' });
-  b.undo.push({ kind: 'pad', buttonIndex: 0, padId: 'PS Pad', label: 'Cross' });
-  b.reset.push({ kind: 'pad', buttonIndex: 9, label: 'Start' });
+  b.split.push({ kind: 'pad', buttonIndex: 10, label: 'Left stick' });
+  b.skip.push({ kind: 'pad', buttonIndex: 3, label: 'Y' });
+  b.reset.push({ kind: 'pad', buttonIndex: 20, label: 'Button 20' });
   return b;
 }
 
@@ -61,7 +62,7 @@ describe('bindings', () => {
     });
     expect(parsed.split).toEqual([
       { kind: 'key', code: 'KeyS' },
-      { kind: 'pad', buttonIndex: 3, label: 'Button 3' },
+      { kind: 'pad', buttonIndex: 3, label: 'Y / Triangle' },
     ]);
     expect(parsed.undo).toEqual([]);
     // Invalid or missing lists get the defaults.
@@ -69,15 +70,28 @@ describe('bindings', () => {
     expect(parsed.reset).toEqual(defaultBindings().reset);
   });
 
-  it('matches pad buttons by pad id first, then by button index alone', () => {
+  it('has no gamepad defaults', () => {
+    const b = defaultBindings();
+    for (let i = 0; i < 20; i++) {
+      expect(actionFor(b, { kind: 'pad', buttonIndex: i, padId: 'Pad', padIndex: 0 })).toBeNull();
+    }
+  });
+
+  it('matches pad buttons by button index, on any pad', () => {
     const b = withPads();
-    expect(actionFor(b, { kind: 'pad', buttonIndex: 0, padId: 'Xbox Pad' })).toBe('split');
-    expect(actionFor(b, { kind: 'pad', buttonIndex: 0, padId: 'PS Pad' })).toBe('undo');
-    // Unknown pad id (e.g. other browser): falls back to the first binding on that index.
-    expect(actionFor(b, { kind: 'pad', buttonIndex: 0, padId: 'Renamed Pad' })).toBe('split');
-    // A binding without pad id matches any pad.
-    expect(actionFor(b, { kind: 'pad', buttonIndex: 9, padId: 'Xbox Pad' })).toBe('reset');
-    expect(actionFor(b, { kind: 'pad', buttonIndex: 5, padId: 'Xbox Pad' })).toBeNull();
+    const press = (buttonIndex: number, padId = 'Any pad') =>
+      actionFor(b, { kind: 'pad', buttonIndex, padId, padIndex: 0 });
+    expect(press(10)).toBe('split');
+    expect(press(10, 'Other pad')).toBe('split');
+    expect(press(3)).toBe('skip');
+    expect(press(20)).toBe('reset');
+    expect(press(5)).toBeNull();
+  });
+
+  it('first action in ACTIONS order wins a shared binding', () => {
+    const b = defaultBindings();
+    b.reset.push({ kind: 'key', code: 'Space' });
+    expect(actionFor(b, { kind: 'key', code: 'Space' })).toBe('split');
   });
 
   it('gives readable names for keys and pad buttons', () => {
@@ -88,5 +102,8 @@ describe('bindings', () => {
     expect(keyLabel('Space')).toBe('Space');
     expect(keyLabel('ArrowLeft')).toBe('Arrow Left');
     expect(bindingLabel({ kind: 'pad', buttonIndex: 0, label: 'A' })).toBe('A');
+    expect(padButtonLabel(0)).toBe('A / Cross');
+    expect(padButtonLabel(15)).toBe('D-pad right');
+    expect(padButtonLabel(17)).toBe('Button 17');
   });
 });
