@@ -59,7 +59,7 @@ interface Peer {
   phase: Phase;
 }
 
-const LOCK_PREFIX = 'live-grit:window:';
+const LOCK_PREFIX = 'livegrit:window:';
 
 function isMessage(data: unknown): data is SyncMessage {
   if (typeof data !== 'object' || data === null) return false;

@@ -9,7 +9,7 @@ import { timerStore } from '../timer/timerStore.svelte';
 /** The Settings window's default size (CSS pixels). */
 export const SETTINGS_WINDOW_SIZE = { width: 960, height: 800 } as const;
 
-const WINDOW_NAME = 'live-grit-settings';
+const WINDOW_NAME = 'livegrit-settings';
 
 let handle: Window | null = null;
 let stopWatching: (() => void) | null = null;

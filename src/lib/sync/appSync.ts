@@ -3,7 +3,7 @@
 import { broadcastBus, browserLocks, WindowSync } from './windowSync.svelte';
 
 export const windowSync = new WindowSync({
-  bus: broadcastBus('live-grit'),
+  bus: broadcastBus('livegrit'),
   locks: browserLocks(),
   onPageHide: (handler) => window.addEventListener('pagehide', handler),
 });

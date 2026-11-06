@@ -1,6 +1,6 @@
 {
   "name": "livesplit-core",
-  "version": "0.13.0-live-grit",
+  "version": "0.13.0-livegrit",
   "description": "livesplit-core compiled to WebAssembly (wasm-bindgen --target web) with generated TypeScript bindings. Built by scripts/build-livesplit-core.sh; see BUILD-INFO.md.",
   "private": true,
   "license": "MIT OR Apache-2.0",

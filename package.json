@@ -1,5 +1,5 @@
 {
-  "name": "live-grit",
+  "name": "livegrit",
   "version": "1.0.0",
   "description": "simple, opinionated speedrun split timer built as a PWA",
   "author": "kryptografisch",
@@ -8,10 +8,10 @@
   "homepage": "https://kryptografisch.github.io/livegrit",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kryptografisch/live-grit.git"
+    "url": "git+https://github.com/kryptografisch/livegrit.git"
   },
   "bugs": {
-    "url": "https://github.com/kryptografisch/live-grit/issues"
+    "url": "https://github.com/kryptografisch/livegrit/issues"
   },
   "keywords": [
     "speedrun",

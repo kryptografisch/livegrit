@@ -17,7 +17,7 @@ const backgroundColor = token('color-bg'); // the splash screen
 /** Replaces `%THEME_COLOR%` in index.html (must match the manifest's `theme_color`). */
 function themeColorHtml(): Plugin {
   return {
-    name: 'live-grit:theme-color',
+    name: 'livegrit:theme-color',
     transformIndexHtml: {
       order: 'pre',
       handler: (html) => html.replaceAll('%THEME_COLOR%', themeColor),
