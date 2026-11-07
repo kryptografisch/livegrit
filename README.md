@@ -6,7 +6,11 @@ It's built with Svelte 5, TypeScript and Vite, and uses [livesplit-core](https:/
 
 > Try [LiveGrit](https://kryptografisch.github.io/livegrit) now.
 
-![LiveGrit screenshots: home, main timer view, and the settings pages for splits, timer and controls](docs/images/overview.png)
+<img src="docs/images/overview-timer.png" alt="home screen and timer during a run" width="100%" />
+
+<img src="docs/images/overview-splits.png" alt="settings: splits with base info, golds and times" width="100%" />
+
+<img src="docs/images/overview-settings.png" alt="settings: timer, controls and data" width="100%" />
 
 ## Usage
 
